@@ -22,6 +22,7 @@
 #define __RAMDISK_H
 
 #include <stdint.h>
+#include <libopencm3/stm32/flash.h>
 
 extern int ramdisk_init(void);
 extern int ramdisk_read(uint32_t lba, uint8_t *copy_to);

@@ -21,6 +21,12 @@
 #include <string.h>
 #include "ramdisk.h"
 
+#define ROM_ADDRESS 0x0800f000
+#define ROM_SIZE_KB 196
+#define FLASH_PAGE_SIZE 2048 // <=128kB: 1024,  <=512kB: 2048
+
+#define ROM_END     (((ROM_SIZE_KB) * 1024) + ROM_ADDRESS)
+
 #define WBVAL(x) ((x) & 0xFF), (((x) >> 8) & 0xFF)
 #define QBVAL(x) ((x) & 0xFF), (((x) >> 8) & 0xFF),\
 		 (((x) >> 16) & 0xFF), (((x) >> 24) & 0xFF)
@@ -42,6 +48,8 @@
 
 // filesize is 64kB (128 * SECTOR_SIZE)
 #define FILEDATA_SECTOR_COUNT	64
+
+unsigned erased = 0;
 
 uint8_t BootSector[] = {
 	0xEB, 0x3C, 0x90,					// code to jump to the bootstrap code
@@ -66,7 +74,7 @@ uint8_t BootSector[] = {
 	'F', 'A', 'T', '1', '2', ' ', ' ', ' '			// filesystem type
 };
 
-uint8_t FatSector[] = {
+uint8_t FatSector[SECTOR_SIZE] = {
 	0xF8, 0xFF, 0xFF, 0x00, 0x40, 0x00, 0x05, 0x60, 0x00, 0x07, 0x80, 0x00,
 	0x09, 0xA0, 0x00, 0x0B, 0xC0, 0x00, 0x0D, 0xE0, 0x00, 0x0F, 0x00, 0x01,
 	0x11, 0x20, 0x01, 0x13, 0x40, 0x01, 0x15, 0x60, 0x01, 0x17, 0x80, 0x01,
@@ -91,7 +99,7 @@ uint8_t FatSector[] = {
 	0x00, 0x00, 0x00, 0x00
 };
 
-uint8_t DirSector[] = {
+uint8_t DirSector[SECTOR_SIZE] = {
 	// long filename entry
 	0x41,									// sequence number
 	WBVAL('r'), WBVAL('a'), WBVAL('m'), WBVAL('d'), WBVAL('i'),		// five name characters in UTF-16
@@ -137,12 +145,14 @@ int ramdisk_init(void)
 		ramdata[i] = text[i % (sizeof(text) -1)];
 		i++;
 	}
+	flash_unlock();
 	return 0;
 }
 
 int ramdisk_read(uint32_t lba, uint8_t *copy_to)
 {
 	memset(copy_to, 0, SECTOR_SIZE);
+        erased = 0;
 	switch (lba) {
 		case 0: // sector 0 is the boot sector
 			memcpy(copy_to, BootSector, sizeof(BootSector));
@@ -159,7 +169,12 @@ int ramdisk_read(uint32_t lba, uint8_t *copy_to)
 		default:
 			// ignore reads outside of the data section
 			if (lba >= FILEDATA_START_SECTOR && lba < FILEDATA_START_SECTOR + FILEDATA_SECTOR_COUNT) {
-				memcpy(copy_to, ramdata + (lba - FILEDATA_START_SECTOR) * SECTOR_SIZE, SECTOR_SIZE);
+				uint32_t *memory_ptr= (uint32_t*)(ROM_ADDRESS + SECTOR_SIZE * (lba - FILEDATA_START_SECTOR));
+				uint8_t *data = copy_to;
+				for (int i = 0; i < SECTOR_SIZE; i += 4) {
+					*(uint32_t *)data = *memory_ptr++;
+					data += 4;
+				}
 			}
 			break;
 	}
@@ -168,6 +183,50 @@ int ramdisk_read(uint32_t lba, uint8_t *copy_to)
 
 int ramdisk_write(uint32_t lba, const uint8_t *copy_from)
 {
+	switch (lba) {
+		case 0: // sector 0 is the boot sector - READ-ONLY
+			break;
+		case 1: // sector 1 is FAT 1st copy
+		case 2: // sector 2 is FAT 2nd copy
+			memcpy(FatSector, copy_from, sizeof(FatSector));
+			break;
+		case 3: // sector 3 is the directory entry
+			memcpy(DirSector, copy_from, sizeof(DirSector));
+			break;
+		default:
+			// ignore reads outside of the data section
+			if (lba >= FILEDATA_START_SECTOR && lba < FILEDATA_START_SECTOR + FILEDATA_SECTOR_COUNT) {
+				uint32_t *memory_ptr= (uint32_t*)(ROM_ADDRESS + SECTOR_SIZE * (lba - FILEDATA_START_SECTOR));
+				if (! erased) {
+					uint32_t *page_address = (uint32_t *)ROM_ADDRESS;
+					while ((uint32_t)page_address < ROM_END) {
+						flash_erase_page((uint32_t)page_address);
+						uint32_t flash_status = flash_get_status_flags();
+						if(flash_status != FLASH_SR_EOP)
+							return 1;
+						page_address += FLASH_PAGE_SIZE;
+					}
+					erased = 1;
+				}
+				for(unsigned i=0; i<SECTOR_SIZE; i += 4)
+				{
+					/*programming word data*/
+					flash_program_word((uint32_t)memory_ptr, *((uint32_t*)(copy_from + i)));
+					uint32_t flash_status = flash_get_status_flags();
+					if(flash_status != FLASH_SR_EOP)
+						return 1;
+
+					/*verify if correct data is programmed*/
+					if(*memory_ptr != *((uint32_t*)(copy_from + i)))
+						return 1;
+					memory_ptr++;
+				}
+			}
+			break;
+
+        return 0;
+}
+				
 	(void)lba;
 	(void)copy_from;
 	// ignore writes
