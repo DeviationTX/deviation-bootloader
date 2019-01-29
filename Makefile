@@ -4,9 +4,7 @@ TARGET  = dbl
 
 LIBOPENCM3 = libopencm3/lib/libopencm3_stm32f1.a
 
-SRC_C    = $(wildcard src/msc2/*.c) \
-           $(wildcard src/msc2/lib/*.c) \
-           $(wildcard src/*.c)
+SRC_C    = $(wildcard src/*.c)
 
 CFLAGS_usb_isr = -fno-lto
 
@@ -32,12 +30,12 @@ ODIR	= objs/$(TARGET)
 OBJS	= $(addprefix $(ODIR)/, $(notdir $(SRC_C:.c=.o) $(SRC_S:.s=.o)))
 
 
-CFLAGS   = -DSTM32F1 -DSTM32F10X_HD -D"assert_param(x)="\
+CFLAGS   = -DSTM32F1 \
            -mthumb -mcpu=cortex-m3 -msoft-float -mfix-cortex-m3-ldrd\
            -fdata-sections -ffunction-sections -fno-builtin-printf \
            -flto -ffat-lto-objects -fwhole-program \
            -Wall -Wextra -std=gnu99 --specs=nano.specs \
-           -Isrc -Isrc/msc2/lib -Isrc/msc2 -Ilibopencm3/include
+           -Ilibopencm3/include
 
 LFLAGS = --static -nostartfiles -Tld/$(TARGET).ld -Wl,-Map=$(TARGET).map \
          -Wl,--gc-sections -L../libopencm3/lib/ -L../libopencm3/lib/stm32/f1/ \
