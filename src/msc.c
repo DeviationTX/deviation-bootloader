@@ -28,6 +28,8 @@
 
 #include "ramdisk.h"
 
+extern void LCD_Init();
+
 static const struct usb_device_descriptor dev_descr = {
 	.bLength = USB_DT_DEVICE_SIZE,
 	.bDescriptorType = USB_DT_DEVICE,
@@ -102,7 +104,6 @@ static const char *usb_strings[] = {
 static usbd_device *msc_dev;
 /* Buffer to be used for control requests. */
 static uint8_t usbd_control_buffer[128];
-
 int main(void)
 {
 	SCB_VTOR = (uint32_t) 0x08003000;
@@ -117,6 +118,7 @@ int main(void)
 			    usbd_control_buffer, sizeof(usbd_control_buffer));
 
 	ramdisk_init();
+        LCD_Init();
 	usb_msc_init(msc_dev, 0x82, 64, 0x01, 64, "VendorID", "ProductID",
 		"0.00", ramdisk_blocks(), ramdisk_read, ramdisk_write);
 

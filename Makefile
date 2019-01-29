@@ -4,7 +4,8 @@ TARGET  = dbl
 
 LIBOPENCM3 = libopencm3/lib/libopencm3_stm32f1.a
 
-SRC_C    = $(wildcard src/*.c)
+SRC_C    = $(wildcard src/*.c) \
+           src/screen/128x64x1_oled_ssd1306_spi.c
 
 CFLAGS_usb_isr = -fno-lto
 
@@ -35,7 +36,7 @@ CFLAGS   = -DSTM32F1 \
            -fdata-sections -ffunction-sections -fno-builtin-printf \
            -flto -ffat-lto-objects -fwhole-program \
            -Wall -Wextra -std=gnu99 --specs=nano.specs \
-           -Ilibopencm3/include
+           -Ilibopencm3/include -Isrc
 
 LFLAGS = --static -nostartfiles -Tld/$(TARGET).ld -Wl,-Map=$(TARGET).map \
          -Wl,--gc-sections -L../libopencm3/lib/ -L../libopencm3/lib/stm32/f1/ \

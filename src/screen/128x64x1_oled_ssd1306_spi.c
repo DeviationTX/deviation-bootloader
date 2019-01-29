@@ -15,8 +15,8 @@
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/stm32/rcc.h>
 #include <libopencm3/stm32/spi.h>
+
 #include "common.h"
-#include "gui/gui.h"
 
 #define CS_HI() gpio_set(GPIOB, GPIO0)
 #define CS_LO() gpio_clear(GPIOB, GPIO0)
