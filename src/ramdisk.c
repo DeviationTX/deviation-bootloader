@@ -49,6 +49,7 @@
 #define ROM_START_SECTOR        (RESERVED_SECTORS + FAT_COPIES + 1) // Boot + 2*FAT + Root
 
 unsigned erased = 0;
+unsigned debug_ptr = 0;
 
 uint8_t BootSector[] = {
 	0xEB, 0x3C, 0x90,					// code to jump to the bootstrap code
@@ -75,7 +76,7 @@ uint8_t BootSector[] = {
 
 uint8_t FatSector[SECTOR_SIZE];
 uint8_t DirSector[SECTOR_SIZE];
-static uint8_t debug[CLUSTER_SIZE];
+static uint8_t debug[CLUSTER_SIZE/8][8];
 
 static const u8 dir_oldfw[32] = {
         'F',  'I',  'R',  'M',  'W',  'A',  'R',  'E',
@@ -109,6 +110,27 @@ static const u8 dir_debug[32] = {
   };
 
 
+static char hex_nibble(u8 val)
+{
+    if (val < 10)
+        return '0' + val;
+    return 'A' + val - 10;
+}
+
+
+static void debugmsg(char *msg, unsigned value)
+{
+    debug[debug_ptr][0] = msg[0];
+    debug[debug_ptr][1] = msg[1];
+    debug[debug_ptr][2] = ' ';
+    debug[debug_ptr][3] = hex_nibble(0x0F & (value >> 12));
+    debug[debug_ptr][4] = hex_nibble(0x0F & (value >> 8));
+    debug[debug_ptr][5] = hex_nibble(0x0F & (value >> 4));
+    debug[debug_ptr][6] = hex_nibble(0x0F & (value >> 0));
+    debug[debug_ptr][7] = '\n';
+    if (debug_ptr < CLUSTER_SIZE / 8)
+        debug_ptr++;
+}
 static void link_fat_cluster(unsigned idx, unsigned next_clstr)
 {
     unsigned offset = idx * 3 / 2;
@@ -142,12 +164,14 @@ int ramdisk_init(void)
         memset(DirSector, 0, sizeof(DirSector));
         memcpy(DirSector, dir_oldfw, sizeof(dir_oldfw));
         memcpy(DirSector + 32, dir_debug, sizeof(dir_debug));
+        memset(debug, 0, sizeof(debug));
 	flash_unlock();
 	return 0;
 }
 
 int ramdisk_read(uint32_t lba, uint8_t *copy_to)
 {
+	debugmsg("r ", lba);
 	memset(copy_to, 0, SECTOR_SIZE);
         erased = 0;
 	switch (lba) {
@@ -177,6 +201,10 @@ int ramdisk_read(uint32_t lba, uint8_t *copy_to)
 					data += 4;
 				}
 			}
+			if (lba >= ROM_START_SECTOR + 2*ROM_SIZE_IN_SECTORS && lba < ROM_START_SECTOR + 2*ROM_SIZE_IN_SECTORS + DEBUG_SIZE_IN_SECTORS) {
+                                u8 *ptr = (u8*)debug;
+				memcpy(copy_to, ptr + (lba - ROM_START_SECTOR + 2*ROM_SIZE_IN_SECTORS) * SECTOR_SIZE, SECTOR_SIZE);
+			}
 			break;
 	}
 	return 0;
@@ -184,6 +212,7 @@ int ramdisk_read(uint32_t lba, uint8_t *copy_to)
 
 int ramdisk_write(uint32_t lba, const uint8_t *copy_from)
 {
+	debugmsg("w ", lba);
 	switch (lba) {
 		case 0: // sector 0 is the boot sector - READ-ONLY
 			break;
@@ -199,6 +228,7 @@ int ramdisk_write(uint32_t lba, const uint8_t *copy_from)
 			if (lba >= ROM_START_SECTOR && lba < ROM_START_SECTOR + ROM_SIZE_IN_SECTORS) {
 				uint32_t *memory_ptr= (uint32_t*)(ROM_ADDRESS + SECTOR_SIZE * (lba - ROM_START_SECTOR));
 				if (! erased) {
+					debugmsg(" e", lba);
 					uint32_t *page_address = (uint32_t *)ROM_ADDRESS;
 					while ((uint32_t)page_address < ROM_END) {
 						flash_erase_page((uint32_t)page_address);
