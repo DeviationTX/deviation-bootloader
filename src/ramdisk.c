@@ -20,34 +20,33 @@
 
 #include <string.h>
 #include "ramdisk.h"
+#include "common.h"
 
 #define ROM_ADDRESS 0x0800f000
-#define ROM_SIZE_KB 196
+#define ROM_SIZE_IN_KB 196      // Must be a multiple of cluster size
 #define FLASH_PAGE_SIZE 2048 // <=128kB: 1024,  <=512kB: 2048
 
-#define ROM_END     (((ROM_SIZE_KB) * 1024) + ROM_ADDRESS)
+#define ROM_END     (((ROM_SIZE_IN_KB) * 1024) + ROM_ADDRESS)
 
 #define WBVAL(x) ((x) & 0xFF), (((x) >> 8) & 0xFF)
 #define QBVAL(x) ((x) & 0xFF), (((x) >> 8) & 0xFF),\
 		 (((x) >> 16) & 0xFF), (((x) >> 24) & 0xFF)
 
 // filesystem size is 512kB (1024 * SECTOR_SIZE)
-#define SECTOR_COUNT		64
 #define SECTOR_SIZE		512
-#define BYTES_PER_SECTOR	512
-#define SECTORS_PER_CLUSTER	4
+#define BYTES_PER_SECTOR	SECTOR_SIZE
+#define SECTORS_PER_CLUSTER	8
 #define RESERVED_SECTORS	1
 #define FAT_COPIES		2
-#define ROOT_ENTRIES		512
 #define ROOT_ENTRY_LENGTH	32
-#define FILEDATA_START_CLUSTER	3
-#define DATA_REGION_SECTOR	(RESERVED_SECTORS + FAT_COPIES + \
-			(ROOT_ENTRIES * ROOT_ENTRY_LENGTH) / BYTES_PER_SECTOR)
-#define FILEDATA_START_SECTOR	(DATA_REGION_SECTOR + \
-			(FILEDATA_START_CLUSTER - 2) * SECTORS_PER_CLUSTER)
-
-// filesize is 64kB (128 * SECTOR_SIZE)
-#define FILEDATA_SECTOR_COUNT	64
+#define CLUSTER_SIZE            (SECTOR_SIZE * SECTORS_PER_CLUSTER)
+#define ROOT_ENTRIES		(SECTOR_SIZE / ROOT_ENTRY_LENGTH)
+#define DEBUG_SIZE_IN_SECTORS   SECTORS_PER_CLUSTER
+#define NUM_NONDATA_SECTORS     (RESERVED_SECTORS + FAT_COPIES + DEBUG_SIZE_IN_SECTORS + 1)    // Boot + 2* FAT + debug + root
+#define SECTOR_COUNT		(2 * ((ROM_SIZE_IN_KB * 1024) / SECTOR_SIZE) + NUM_NONDATA_SECTORS)
+#define ROM_SIZE_IN_CLUSTERS    (ROM_SIZE_IN_KB * 1024 / CLUSTER_SIZE)
+#define ROM_SIZE_IN_SECTORS     (ROM_SIZE_IN_KB * 1024 / SECTOR_SIZE)
+#define ROM_START_SECTOR        (RESERVED_SECTORS + FAT_COPIES + 1) // Boot + 2*FAT + Root
 
 unsigned erased = 0;
 
@@ -74,77 +73,75 @@ uint8_t BootSector[] = {
 	'F', 'A', 'T', '1', '2', ' ', ' ', ' '			// filesystem type
 };
 
-uint8_t FatSector[SECTOR_SIZE] = {
-	0xF8, 0xFF, 0xFF, 0x00, 0x40, 0x00, 0x05, 0x60, 0x00, 0x07, 0x80, 0x00,
-	0x09, 0xA0, 0x00, 0x0B, 0xC0, 0x00, 0x0D, 0xE0, 0x00, 0x0F, 0x00, 0x01,
-	0x11, 0x20, 0x01, 0x13, 0x40, 0x01, 0x15, 0x60, 0x01, 0x17, 0x80, 0x01,
-	0x19, 0xA0, 0x01, 0x1B, 0xC0, 0x01, 0x1D, 0xE0, 0x01, 0x1F, 0x00, 0x02,
-	0x21, 0x20, 0x02, 0x23, 0x40, 0x02, 0x25, 0x60, 0x02, 0x27, 0x80, 0x02,
-	0x29, 0xA0, 0x02, 0x2B, 0xC0, 0x02, 0x2D, 0xE0, 0x02, 0x2F, 0x00, 0x03,
-	0x31, 0x20, 0x03, 0x33, 0x40, 0x03, 0x35, 0x60, 0x03, 0x37, 0x80, 0x03,
-	0x39, 0xA0, 0x03, 0x3B, 0xC0, 0x03, 0x3D, 0xE0, 0x03, 0x3F, 0x00, 0x04,
-	0x41, 0x20, 0x04, 0x43, 0x40, 0x04, 0x45, 0x60, 0x04, 0x47, 0x80, 0x04,
-	0x49, 0xA0, 0x04, 0x4B, 0xC0, 0x04, 0x4D, 0xE0, 0x04, 0x4F, 0x00, 0x05,
-	0x51, 0x20, 0x05, 0x53, 0x40, 0x05, 0x55, 0x60, 0x05, 0x57, 0x80, 0x05,
-	0x59, 0xA0, 0x05, 0x5B, 0xC0, 0x05, 0x5D, 0xE0, 0x05, 0x5F, 0x00, 0x06,
-	0x61, 0x20, 0x06, 0x63, 0x40, 0x06, 0x65, 0x60, 0x06, 0x67, 0x80, 0x06,
-	0x69, 0xA0, 0x06, 0x6B, 0xC0, 0x06, 0x6D, 0xE0, 0x06, 0x6F, 0x00, 0x07,
-	0x71, 0x20, 0x07, 0x73, 0x40, 0x07, 0x75, 0x60, 0x07, 0x77, 0x80, 0x07,
-	0x79, 0xA0, 0x07, 0x7B, 0xC0, 0x07, 0x7D, 0xE0, 0x07, 0x7F, 0x00, 0x08,
-	0x81, 0x20, 0x08, 0xFF, 0x0F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00
-};
+uint8_t FatSector[SECTOR_SIZE];
+uint8_t DirSector[SECTOR_SIZE];
+static uint8_t debug[CLUSTER_SIZE];
 
-uint8_t DirSector[SECTOR_SIZE] = {
-	// long filename entry
-	0x41,									// sequence number
-	WBVAL('r'), WBVAL('a'), WBVAL('m'), WBVAL('d'), WBVAL('i'),		// five name characters in UTF-16
-	0x0F,									// attributes
-	0x00,									// type
-	0x00,									// checksum of DOS filename (computed in ramdisk_init)
-	WBVAL('s'), WBVAL('k'), WBVAL('.'), WBVAL('d'), WBVAL('a'), WBVAL('t'),	// six name characters in UTF-16
-	0x00, 0x00,								// first cluster
-	WBVAL(0), WBVAL(0),							// two name characters in UTF-16
-	// actual entry
-	'R', 'A', 'M', 'D', 'I', 'S', 'K', ' ',					// filename
-	'D', 'A', 'T',								// extension
-	0x20,									// attribute byte
-	0x00,									// reserved for Windows NT
-	0x00,									// creation millisecond
-	0xCE, 0x01,								// creation time
-	0x86, 0x41,								// creation date
-	0x86, 0x41,								// last access date
-	0x00, 0x00,								// reserved for FAT32
-	0xCE, 0x01,								// last write time
-	0x86, 0x41,								// last write date
-	WBVAL(FILEDATA_START_CLUSTER),						// start cluster
-	QBVAL(FILEDATA_SECTOR_COUNT * SECTOR_SIZE)				// file size in bytes
-};
+static const u8 dir_oldfw[32] = {
+        'F',  'I',  'R',  'M',  'W',  'A',  'R',  'E',
+        'O',  'L',  'D',
+	0x01,							// attribute byte
+	0x00,							// reserved for Windows NT
+	0x00,							// creation millisecond
+	0xCE, 0x01,						// creation time
+	0x86, 0x41,						// creation date
+	0x86, 0x41,						// last access date
+	0x00, 0x00,						// reserved for FAT32
+	0xCE, 0x01,						// last write time
+	0x86, 0x41,						// last write date
+	WBVAL(2 + ROM_SIZE_IN_CLUSTERS),			// start cluster
+	QBVAL(ROM_SIZE_IN_KB * 1024)				// file size in bytes
+  };
+static const u8 dir_debug[32] = {
+        'D',  'E',  'B',  'U',  'G',  ' ',  ' ',  ' ',
+        ' ',  ' ',  ' ',
+	0x01,							// attribute byte
+	0x00,							// reserved for Windows NT
+	0x00,							// creation millisecond
+	0xCE, 0x01,						// creation time
+	0x86, 0x41,						// creation date
+	0x86, 0x41,						// last access date
+	0x00, 0x00,						// reserved for FAT32
+	0xCE, 0x01,						// last write time
+	0x86, 0x41,						// last write date
+	WBVAL(2 + 2 * ROM_SIZE_IN_CLUSTERS),			// start cluster
+	QBVAL(sizeof(debug))					// file size in bytes
+  };
 
-static uint8_t ramdata[FILEDATA_SECTOR_COUNT * SECTOR_SIZE];
+
+static void link_fat_cluster(unsigned idx, unsigned next_clstr)
+{
+    unsigned offset = idx * 3 / 2;
+    if (idx & 0x01) {
+        next_clstr <<= 4;
+    }
+    FatSector[offset] |= next_clstr & 0xff;
+    FatSector[offset+1] |= (next_clstr >> 8) & 0xff;
+}
+
+static void build_fat()
+{
+    memset(FatSector, 0, sizeof(FatSector));
+    link_fat_cluster(0, 0xff8);
+    link_fat_cluster(1, 0xfff);
+
+    // data can start at cluster 2
+    unsigned cluster = 2 + ROM_SIZE_IN_CLUSTERS;
+    unsigned end_cluster = cluster + ROM_SIZE_IN_CLUSTERS;
+     
+    while (cluster < end_cluster - 1) {
+        link_fat_cluster(cluster, cluster + 1);
+        cluster++;
+    }
+    link_fat_cluster(cluster, 0xfff);
+    link_fat_cluster(cluster+1, 0xfff); //Debug
+}
 
 int ramdisk_init(void)
 {
-	uint32_t i = 0;
-
-	// compute checksum in the directory entry
-	uint8_t chk = 0;
-	for (i = 32; i < 43; i++) {
-		chk = (((chk & 1) << 7) | ((chk & 0xFE) >> 1)) + DirSector[i];
-	}
-	DirSector[13] = chk;
-
-	// fill ramdata
-	const uint8_t text[] = "USB Mass Storage Class example. ";
-	i = 0;
-	while (i < sizeof(ramdata)) {
-		ramdata[i] = text[i % (sizeof(text) -1)];
-		i++;
-	}
+        memset(DirSector, 0, sizeof(DirSector));
+        memcpy(DirSector, dir_oldfw, sizeof(dir_oldfw));
+        memcpy(DirSector + 32, dir_debug, sizeof(dir_debug));
 	flash_unlock();
 	return 0;
 }
@@ -168,8 +165,12 @@ int ramdisk_read(uint32_t lba, uint8_t *copy_to)
 			break;
 		default:
 			// ignore reads outside of the data section
-			if (lba >= FILEDATA_START_SECTOR && lba < FILEDATA_START_SECTOR + FILEDATA_SECTOR_COUNT) {
-				uint32_t *memory_ptr= (uint32_t*)(ROM_ADDRESS + SECTOR_SIZE * (lba - FILEDATA_START_SECTOR));
+			if (lba >= ROM_START_SECTOR && lba < ROM_START_SECTOR + 2*ROM_SIZE_IN_SECTORS) {
+                                if (lba > ROM_START_SECTOR + ROM_SIZE_IN_SECTORS) {
+                                    //2 copies of ROM are provided
+                                    lba -= ROM_SIZE_IN_SECTORS;
+                                }
+				uint32_t *memory_ptr= (uint32_t*)(ROM_ADDRESS + SECTOR_SIZE * (lba - ROM_START_SECTOR));
 				uint8_t *data = copy_to;
 				for (int i = 0; i < SECTOR_SIZE; i += 4) {
 					*(uint32_t *)data = *memory_ptr++;
@@ -187,16 +188,16 @@ int ramdisk_write(uint32_t lba, const uint8_t *copy_from)
 		case 0: // sector 0 is the boot sector - READ-ONLY
 			break;
 		case 1: // sector 1 is FAT 1st copy
+			build_fat();
 		case 2: // sector 2 is FAT 2nd copy
-			memcpy(FatSector, copy_from, sizeof(FatSector));
 			break;
 		case 3: // sector 3 is the directory entry
 			memcpy(DirSector, copy_from, sizeof(DirSector));
 			break;
 		default:
 			// ignore reads outside of the data section
-			if (lba >= FILEDATA_START_SECTOR && lba < FILEDATA_START_SECTOR + FILEDATA_SECTOR_COUNT) {
-				uint32_t *memory_ptr= (uint32_t*)(ROM_ADDRESS + SECTOR_SIZE * (lba - FILEDATA_START_SECTOR));
+			if (lba >= ROM_START_SECTOR && lba < ROM_START_SECTOR + ROM_SIZE_IN_SECTORS) {
+				uint32_t *memory_ptr= (uint32_t*)(ROM_ADDRESS + SECTOR_SIZE * (lba - ROM_START_SECTOR));
 				if (! erased) {
 					uint32_t *page_address = (uint32_t *)ROM_ADDRESS;
 					while ((uint32_t)page_address < ROM_END) {
