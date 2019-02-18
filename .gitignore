@@ -1,0 +1,7 @@
+*.elf
+*.map
+*.bin
+*.list
+*.dfu
+*.d
+*.o
