@@ -243,6 +243,7 @@ static void usbdfu_set_config(usbd_device *usbd_dev, uint16_t wValue)
 
 static int check_button_press(void)
 {
+        return 1;
 	rcc_periph_clock_enable(RCC_MATRIX_ROW);
 	rcc_periph_clock_enable(RCC_MATRIX_COL);
 	gpio_set_mode(MATRIX_COL_PORT, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_OPENDRAIN,
@@ -287,6 +288,17 @@ void SPI_Init()
     spi_enable(SPIx);
 }
 
+void USB_Init()
+{
+    rcc_periph_clock_enable(RCC_GPIOB);
+    rcc_periph_clock_enable(RCC_GPIOA);
+    rcc_periph_clock_enable(RCC_OTGFS);
+
+    PORT_mode_setup(((struct mcu_pin){GPIOA, GPIO11 | GPIO12}), GPIO_MODE_INPUT, GPIO_CNF_INPUT_FLOAT);
+    PORT_mode_setup(((struct mcu_pin){GPIOB, GPIO10}), GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_PUSHPULL);
+    gpio_clear(GPIOB, GPIO10);
+}
+
 int main(void)
 {
 	usbd_device *usbd_dev;
@@ -308,6 +320,7 @@ int main(void)
 
 	SPI_Init();
 	LCD_Init();
+        USB_Init();
 
 	usbd_dev = usbd_init(&st_usbfs_v1_usb_driver, &dev, &config, usb_strings, 4, usbd_control_buffer, sizeof(usbd_control_buffer));
 	usbd_register_set_config_callback(usbd_dev, usbdfu_set_config);
