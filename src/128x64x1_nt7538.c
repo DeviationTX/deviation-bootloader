@@ -27,8 +27,6 @@
 #define PHY_LCD_WIDTH 129
 #define LCD_PAGES 8
 
-static void draw_splash();
-
 static void CS_HI()
 {
     PORT_pin_set(LCD_CSN_PIN);
@@ -92,6 +90,15 @@ void LCD_Contrast(unsigned contrast)
     LCD_Cmd(c);
 }
 
+static void backlight_init()
+{
+    rcc_periph_clock_enable(RCC_GPIOB);
+    PORT_mode_setup(BACKLIGHT_PIN, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_PUSHPULL);
+    PORT_pin_set(BACKLIGHT_PIN);
+}
+
+#include "draw_splash.h"
+
 void LCD_Init()
 {
     //Initialization is mostly done in SPI Flash
@@ -102,13 +109,13 @@ void LCD_Init()
     LCD_Cmd(0xE2);  //Reset
     volatile int i = 0x8000;
     while(i) i--;
-    LCD_Cmd(0xAE);  //Display off
-    LCD_Cmd(0xA6);  //Normal display
-    LCD_Cmd(0xA4);  //All Points Normal
-    LCD_Cmd(0xEA);  //??
-    LCD_Cmd(0xA0);  //ADC Normal
-    LCD_Cmd(0xC4);  //Common Output Mode Scan Rate
-    LCD_Cmd(0x2C); //Power Controller:Booster ON
+    lcd_display(0);     // Display Off
+    LCD_Cmd(0xA6);      // Normal display
+    LCD_Cmd(0xA4);      // All Points Normal
+    LCD_Cmd(0xA0);      // Set SEG Direction (Normal)
+    LCD_Cmd(0xC8);  // Set COM Direction (Reversed)
+    LCD_Cmd(0xA2);  // Set The LCD Display Driver Voltage Bias Ratio (1/9)
+    LCD_Cmd(0x2C);      // Power Controller:Booster ON
     i = 0x8000;
     while(i) i--;
     LCD_Cmd(0x2E); //Power Controller: VReg ON
@@ -119,32 +126,8 @@ void LCD_Init()
     while(i) i--;
     lcd_set_start_line(0);
     // Display data write (6)
-    draw_splash();
     lcd_display(1);
+    draw_splash();
     LCD_Contrast(5);
-}
-
-/* Screen coordinates are as follows:
- * (128, 32)   ....   (0, 32)
- *   ...       ....     ...
- * (128, 63)   ....   (0, 63)
- * (128, 0)    ....   (0, 0)
- *   ...       ....     ...
- * (128, 31)   ....   (0, 31)
- */
-void draw_splash()
-{
-    unsigned ypos = ((64 - splash_height) / 2 + 7) / 8;
-    unsigned xpos = (128 - splash_width) / 2;
-    for (unsigned p = 0; p < LCD_PAGES; p++) {
-        lcd_set_page_address(p);
-        lcd_set_column_address(0);
-        for(unsigned col = 0; col < PHY_LCD_WIDTH; col++) {
-            if (col < xpos || p < ypos || col - xpos > splash_width || p - ypos > splash_height / 8) {
-                LCD_Data(0x00);
-            } else {
-                LCD_Data(splash[(col - xpos) * (splash_height / 8) + (p - ypos)]);
-            }
-        }
-    }
+    backlight_init();
 }

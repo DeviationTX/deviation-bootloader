@@ -18,7 +18,6 @@
 #include "hardware.h"
 #include "splash.h"
 
-void draw_splash();
 static void CS_HI()
 {
     PORT_pin_set(LCD_CSN_PIN);
@@ -84,6 +83,8 @@ void LCD_Contrast(unsigned contrast)
     LCD_Cmd(c);
 }
 
+#include "draw_splash.h"
+
 void LCD_Init()
 {
     //Initialization is mostly done in SPI Flash
@@ -118,20 +119,4 @@ void LCD_Init()
     lcd_display(1); //Display On
     draw_splash();
     LCD_Contrast(5);
-}
-void draw_splash()
-{
-    unsigned ypos = ((64 - splash_height) / 2 + 7) / 8;
-    unsigned xpos = (128 - splash_width) / 2;
-    for (unsigned p = 0; p < LCD_PAGES; p++) {
-        lcd_set_page_address(p);
-        lcd_set_column_address(0);
-        for(unsigned col = 0; col < PHY_LCD_WIDTH; col++) {
-            if (col < xpos || p < ypos || col - xpos >= splash_width || p - ypos >= splash_height / 8) {
-                LCD_Data(0x00);
-            } else {
-                LCD_Data(splash[(col - xpos) * (splash_height / 8) + (p - ypos)]);
-            }
-        }
-    }
 }

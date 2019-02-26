@@ -18,7 +18,13 @@
 ##
 
 TXVER = "T8SGV2+"
+
+# OLED Display
 DISPLAY = 128x64x1_oled_ssd1306
+# LCD Display
+# DISPLAY = 128x64x1_nt7538
+
+
 TARGET = t8sgdfu
 LDSCRIPT = devo.ld
 LIBOPENCM3 = $(SDIR)/libopencm3/lib/libopencm3_stm32f1.a
@@ -34,6 +40,9 @@ SRC    = usbdfu.c $(DISPLAY).c
 OBJS   = $(addprefix objs/, $(SRC:.c=.o))
 
 all: $(TARGET).dfu
+
+clean:
+	rm objs/* 2> /dev/null || /bin/true
 
 $(TARGET).dfu: objs/$(TARGET).bin
 	./utils/dfu.py --name "t8sg Bootloader Firmware" $(DFU_ARGS):$< $@

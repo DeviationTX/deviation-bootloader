@@ -17,6 +17,8 @@ struct mcu_pin {
 #define PWR_SWITCH_PIN ((struct mcu_pin) {GPIOA, GPIO3})
 #define PWR_ENABLE_PIN ((struct mcu_pin) {GPIOA, GPIO2})
 
+#define BACKLIGHT_PIN ((struct mcu_pin) {GPIOB, GPIO1})
+
 #define LCD_CMD_PIN   ((struct mcu_pin) {GPIOC, GPIO5})
 #define LCD_CSN_PIN   ((struct mcu_pin) {GPIOB, GPIO0})
 #define FLASH_CSN_PIN   ((struct mcu_pin) {GPIOB, GPIO2})
