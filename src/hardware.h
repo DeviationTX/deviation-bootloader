@@ -9,8 +9,6 @@ struct mcu_pin {
     uint32_t pin;
 };
 
-#define APP_ADDRESS	0x08006000
-
 #define SPIx        SPI1
 #define RCC_SPIx    RCC_SPI1
 

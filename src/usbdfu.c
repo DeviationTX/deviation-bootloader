@@ -28,6 +28,20 @@
 #include "hardware.h"
 
 unsigned char __attribute__((section(".version"))) txver[12] = TXVER;
+#define APP_ADDRESS  (LOAD_ADDRESS == 0x08000000 ? 0x08002000 : 0x08006000)
+#if ROMSIZE == 256
+    #if LOAD_ADDRESS == 0x08000000
+        #define ROM_CFG "4*002Ka,124*002Kg"
+    #else
+        #define ROM_CFG "0*002Ka,128*002Kg"
+    #endif
+#else
+    #if LOAD_ADDRESS == 0x08000000
+        #define ROM_CFG "8*001Ka,120*001Kg"
+    #else
+        #define ROM_CFG "0*001Ka,128*001Kg"
+    #endif
+#endif
 
 /* Commands sent with wBlockNum == 0 as per ST implementation. */
 #define CMD_SETADDR	0x21
@@ -114,7 +128,7 @@ static const char *usb_strings[] = {
 	"T8SG Deviation Bootloader",
 	TXVER,
 	/* This string is used by ST Microelectronics' DfuSe utility. */
-	"@Internal Flash   /0x08000000/6*002Ka,122*002Kg",
+	"@Internal Flash   /0x08000000/" ROM_CFG,
 };
 
 static uint8_t usbdfu_getstatus(usbd_device *usbd_dev, uint32_t *bwPollTimeout)

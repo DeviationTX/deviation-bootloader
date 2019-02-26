@@ -17,42 +17,85 @@
 ## along with this library.  If not, see <http://www.gnu.org/licenses/>.
 ##
 
+#======================= START OF SETTINGS ==========================
+#The following settings need to be updated for each transmitter
+
+# TVXER: Unique string used by Deviation to identify transmitter
+#        Known Values: T8SGV1, T8SGV2, T8SGV2+, T8SGV3, T8SGV3+,
+#                      DEVO7E, DEVO7E-256
 TXVER = "T8SGV2+"
 
-# OLED Display
-DISPLAY = 128x64x1_oled_ssd1306
-# LCD Display
-# DISPLAY = 128x64x1_nt7538
+# DISPLAY_TYPE: Type of Display.  Valid values 'OLED' or 'LCD'
+DISPLAY_TYPE = "LCD"
 
+# ROMSIZE: Size of FLASH rom.  Valid values 128, 256
+ROMSIZE = 256
 
-TARGET = t8sgdfu
-LDSCRIPT = devo.ld
-LIBOPENCM3 = $(SDIR)/libopencm3/lib/libopencm3_stm32f1.a
-DFU_ARGS    := -c 7 -b 0x08003000
+# TWO_STAGE: Whether to load the bootloader after the Walkera bootloader
+#            This should only be used for testing as it requires
+#            modifications to deviation to support.
+#            The default value is 0, and should only be changed to 1
+#            if you really know what you are doing
+TWO_STAGE = 0
+#======================== END OF SETTINGS ===========================
+
+ifeq ($(DISPLAY_TYPE),"OLED")
+    DISPLAY = 128x64x1_nt7538
+else
+    DISPLAY = 128x64x1_oled_ssd1306
+endif
+
 PREFIX          ?= arm-none-eabi
 CC              := $(PREFIX)-gcc
 OBJCOPY         := $(PREFIX)-objcopy
 OBJDUMP         := $(PREFIX)-objdump
 
-CFLAGS = -D'TXVER=$(TXVER)' -Os -std=gnu99 -ggdb3 -mthumb -mcpu=cortex-m3 -msoft-float -mfix-cortex-m3-ldrd -Wextra -Wshadow -Wimplicit-function-declaration -Wredundant-decls -fno-common -ffunction-sections -fdata-sections  -MD -Wall -Wundef -DSTM32F1 -Ilibopencm3//include
+lc = $(subst A,a,$(subst B,b,$(subst C,c,$(subst D,d,$(subst E,e,$(subst F,f,$(subst G,g,$(subst H,h,$(subst I,i,$(subst J,j,$(subst K,k,$(subst L,l,$(subst M,m,$(subst N,n,$(subst O,o,$(subst P,p,$(subst Q,q,$(subst R,r,$(subst S,s,$(subst T,t,$(subst U,u,$(subst V,v,$(subst W,w,$(subst X,x,$(subst Y,y,$(subst Z,z,$1))))))))))))))))))))))))))
+
+TXVERlc = $(call lc,$(TXVER))
+TARGET = bootloader-$(TXVERlc)
+LIBOPENCM3 = $(SDIR)/libopencm3/lib/libopencm3_stm32f1.a
+
+ifeq ($(TWO_STAGE),1)
+    LOAD_ADDRESS := 0x08003000
+    DFU_ARGS     := -c 7 -b $(LOAD_ADDRESS)
+    LDSCRIPT = two_stage.ld
+else
+    LOAD_ADDRESS := 0x08000000
+    DFU_ARGS    := -c 0 -b 0x08000000
+    LDSCRIPT = default.ld
+endif
+
+ODIR = objs/$(TXVERlc)
+CFLAGS = -D'TXVER=$(TXVER)' -DROMSIZE=$(ROMSIZE) -DLOAD_ADDRESS=$(LOAD_ADDRESS) \
+         -Os -std=gnu99 -ggdb3 -mthumb -mcpu=cortex-m3 -msoft-float -mfix-cortex-m3-ldrd \
+         -Wextra -Wshadow -Wimplicit-function-declaration -Wredundant-decls \
+         -fno-common -ffunction-sections -fdata-sections  -MD -Wall -Wundef \
+         -DSTM32F1 -Ilibopencm3//include
 
 SRC    = usbdfu.c $(DISPLAY).c
-OBJS   = $(addprefix objs/, $(SRC:.c=.o))
+OBJS   = $(addprefix $(ODIR)/, $(SRC:.c=.o))
 
 all: $(TARGET).dfu
 
 clean:
+	rm $(ODIR)/* 2> /dev/null || /bin/true
+
+distclean:
 	rm objs/* 2> /dev/null || /bin/true
 
-$(TARGET).dfu: objs/$(TARGET).bin
+$(ODIR):
+	@mkdir -p $@
+
+$(TARGET).dfu: $(ODIR)/$(TARGET).bin
 	./utils/dfu.py --name "t8sg Bootloader Firmware" $(DFU_ARGS):$< $@
-	./utils/get_mem_usage.pl objs/$(TARGET).map
+	./utils/get_mem_usage.pl $(ODIR)/$(TARGET).map
 
 
-objs/$(TARGET).elf: $(OBJS) src/hardware.h $(LIBOPENCM3)
-	$(CC) --static -nostartfiles -Tsrc/$(LDSCRIPT) $(CFLAGS) -Wl,-Map=objs/$(TARGET).map -Wl,--cref -Wl,--gc-sections -Llibopencm3/lib $(OBJS) -lopencm3_stm32f1 -Wl,--start-group -lc -lgcc -lnosys -Wl,--end-group -o $@
+$(ODIR)/$(TARGET).elf: $(OBJS) src/hardware.h $(LIBOPENCM3)
+	$(CC) --static -nostartfiles -Tsrc/$(LDSCRIPT) $(CFLAGS) -Wl,-Map=$(ODIR)/$(TARGET).map -Wl,--cref -Wl,--gc-sections -Llibopencm3/lib $(OBJS) -lopencm3_stm32f1 -Wl,--start-group -lc -lgcc -lnosys -Wl,--end-group -o $@
 
-$(OBJS): objs/%.o: src/%.c Makefile
+$(OBJS): $(ODIR)/%.o: src/%.c Makefile $(ODIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 %.bin: %.elf
