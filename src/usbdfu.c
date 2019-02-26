@@ -28,7 +28,13 @@
 #include "hardware.h"
 
 unsigned char __attribute__((section(".version"))) txver[12] = TXVER;
-#define APP_ADDRESS  (LOAD_ADDRESS == 0x08000000 ? 0x08002000 : 0x08006000)
+
+///////////////////////////////////////////////////////////////////////////////
+// For now the bootloader reserves 12kB even though it fits in 8kB
+// I don't want to make the extra 4kB available until I know if the MSC
+// bootloader can fit in 8kB, since that is the expected final-form of the bootloader
+// #define APP_ADDRESS  (LOAD_ADDRESS == 0x08000000 ? 0x08002000 : 0x08006000)
+#define APP_ADDRESS  (LOAD_ADDRESS == 0x08000000 ? 0x08003000 : 0x08006000)
 #if ROMSIZE == 256
     #if LOAD_ADDRESS == 0x08000000
         #define ROM_CFG "4*002Ka,124*002Kg"
