@@ -16,8 +16,9 @@ ENTRY(reset_handler)
 SECTIONS
 {
 	.text : {
-		*(.vectors)	/* Vector table */
-		*(.text*)	/* Program code */
+		*(.vectors)		/* Vector table */
+		KEEP(*(.version))	/* Transmitter version */
+		*(.text*)		/* Program code */
 	} >rom
 	.rodata :{
 		. = ALIGN(4);

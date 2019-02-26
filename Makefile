@@ -17,6 +17,7 @@
 ## along with this library.  If not, see <http://www.gnu.org/licenses/>.
 ##
 
+TXVER = "T8SGV2+"
 DISPLAY = 128x64x1_oled_ssd1306
 TARGET = t8sgdfu
 LDSCRIPT = devo.ld
@@ -27,7 +28,7 @@ CC              := $(PREFIX)-gcc
 OBJCOPY         := $(PREFIX)-objcopy
 OBJDUMP         := $(PREFIX)-objdump
 
-CFLAGS = -Os -std=gnu99 -ggdb3 -mthumb -mcpu=cortex-m3 -msoft-float -mfix-cortex-m3-ldrd -Wextra -Wshadow -Wimplicit-function-declaration -Wredundant-decls -fno-common -ffunction-sections -fdata-sections  -MD -Wall -Wundef -DSTM32F1 -Ilibopencm3//include
+CFLAGS = -D'TXVER=$(TXVER)' -Os -std=gnu99 -ggdb3 -mthumb -mcpu=cortex-m3 -msoft-float -mfix-cortex-m3-ldrd -Wextra -Wshadow -Wimplicit-function-declaration -Wredundant-decls -fno-common -ffunction-sections -fdata-sections  -MD -Wall -Wundef -DSTM32F1 -Ilibopencm3//include
 
 SRC    = usbdfu.c $(DISPLAY).c
 OBJS   = $(addprefix objs/, $(SRC:.c=.o))
@@ -42,7 +43,7 @@ $(TARGET).dfu: objs/$(TARGET).bin
 objs/$(TARGET).elf: $(OBJS) src/hardware.h $(LIBOPENCM3)
 	$(CC) --static -nostartfiles -Tsrc/$(LDSCRIPT) $(CFLAGS) -Wl,-Map=objs/$(TARGET).map -Wl,--cref -Wl,--gc-sections -Llibopencm3/lib $(OBJS) -lopencm3_stm32f1 -Wl,--start-group -lc -lgcc -lnosys -Wl,--end-group -o $@
 
-$(OBJS): objs/%.o: src/%.c
+$(OBJS): objs/%.o: src/%.c Makefile
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 %.bin: %.elf

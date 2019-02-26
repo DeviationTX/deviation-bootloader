@@ -27,6 +27,8 @@
 #include <libopencm3/usb/dfu.h>
 #include "hardware.h"
 
+unsigned char __attribute__((section(".version"))) txver[12] = TXVER;
+
 /* Commands sent with wBlockNum == 0 as per ST implementation. */
 #define CMD_SETADDR	0x21
 #define CMD_ERASE	0x41
@@ -108,11 +110,11 @@ const struct usb_config_descriptor config = {
 };
 
 static const char *usb_strings[] = {
-	"Black Sphere Technologies",
-	"DFU Demo",
-	"DEMO",
+	"Jumper",
+	"T8SG Deviation Bootloader",
+	TXVER,
 	/* This string is used by ST Microelectronics' DfuSe utility. */
-	"@Internal Flash   /0x08000000/8*001Ka,56*001Kg",
+	"@Internal Flash   /0x08000000/6*002Ka,122*002Kg",
 };
 
 static uint8_t usbdfu_getstatus(usbd_device *usbd_dev, uint32_t *bwPollTimeout)
@@ -206,8 +208,20 @@ static enum usbd_request_return_codes usbdfu_control_request(usbd_device *usbd_d
 		usbdfu_state = STATE_DFU_IDLE;
 		return USBD_REQ_HANDLED;
 	case DFU_UPLOAD:
-		/* Upload not supported for now. */
-		return USBD_REQ_NOTSUPP;
+	        if (!req->wValue) {
+	                // Send back supported commands.
+	                usbd_control_buffer[0] = 0x00;
+	                usbd_control_buffer[1] = CMD_SETADDR;
+	                usbd_control_buffer[2] = CMD_ERASE;
+	                *len = 3;
+	        } else {
+	                // Send back data if only if we enabled that.
+	                // From formula Address_Pointer + ((wBlockNum - 2)*wTransferSize)
+	                uint32_t baseaddr = prog.addr + ((req->wValue - 2) * sizeof(usbd_control_buffer));
+	                memcpy(usbd_control_buffer, (void*)baseaddr, sizeof(usbd_control_buffer));
+	                *len = sizeof(usbd_control_buffer);
+	        }
+	        return USBD_REQ_HANDLED;
 	case DFU_GETSTATUS: {
 		uint32_t bwPollTimeout = 0; /* 24-bit integer in DFU class spec */
 		(*buf)[0] = usbdfu_getstatus(usbd_dev, &bwPollTimeout);
@@ -241,24 +255,20 @@ static void usbdfu_set_config(usbd_device *usbd_dev, uint16_t wValue)
 				usbdfu_control_request);
 }
 
-static int check_button_press(void)
+static void PWR_Init()
 {
-        return 1;
-	rcc_periph_clock_enable(RCC_MATRIX_ROW);
-	rcc_periph_clock_enable(RCC_MATRIX_COL);
-	gpio_set_mode(MATRIX_COL_PORT, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_OPENDRAIN,
-		MATRIX_COL_MASK);
-	gpio_set(MATRIX_COL_PORT, MATRIX_COL_MASK);
-	gpio_set_mode(MATRIX_ROW_PORT, GPIO_MODE_INPUT,
-                GPIO_CNF_INPUT_PULL_UPDOWN, MATRIX_ROW_MASK);
-	gpio_set(MATRIX_ROW_PORT, MATRIX_ROW_MASK);
-	gpio_clear(MATRIX_COL_PORT, MATRIX_COL_PIN);
-	uint16_t val = gpio_port_read(MATRIX_ROW_PORT) & MATRIX_ROW_PIN;
-	gpio_set(MATRIX_COL_PORT, MATRIX_COL_PIN);
-	return val == 0;
+    rcc_periph_clock_enable(RCC_GPIOA);
+
+    /* Pin controls power-down */
+    PORT_mode_setup(PWR_ENABLE_PIN, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_PUSHPULL);
+    /* Enable GPIOA.2 to keep from shutting down */
+    PORT_pin_set(PWR_ENABLE_PIN);
+
+    /* When Pin goes high, the user turned off the Tx */
+    PORT_mode_setup(PWR_SWITCH_PIN, GPIO_MODE_INPUT, GPIO_CNF_INPUT_FLOAT);
 }
 
-void SPI_Init()
+static void SPI_Init()
 {
     /* Enable SPIx */
     rcc_periph_clock_enable(RCC_SPIx);
@@ -288,7 +298,7 @@ void SPI_Init()
     spi_enable(SPIx);
 }
 
-void USB_Init()
+static void USB_Init()
 {
     rcc_periph_clock_enable(RCC_GPIOB);
     rcc_periph_clock_enable(RCC_GPIOA);
@@ -297,6 +307,22 @@ void USB_Init()
     PORT_mode_setup(((struct mcu_pin){GPIOA, GPIO11 | GPIO12}), GPIO_MODE_INPUT, GPIO_CNF_INPUT_FLOAT);
     PORT_mode_setup(((struct mcu_pin){GPIOB, GPIO10}), GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_PUSHPULL);
     gpio_clear(GPIOB, GPIO10);
+}
+
+static int check_button_press(void)
+{
+	rcc_periph_clock_enable(RCC_MATRIX_ROW);
+	rcc_periph_clock_enable(RCC_MATRIX_COL);
+	gpio_set_mode(MATRIX_COL_PORT, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_OPENDRAIN,
+		MATRIX_COL_MASK);
+	gpio_set(MATRIX_COL_PORT, MATRIX_COL_MASK);
+	gpio_set_mode(MATRIX_ROW_PORT, GPIO_MODE_INPUT,
+                GPIO_CNF_INPUT_PULL_UPDOWN, MATRIX_ROW_MASK);
+	gpio_set(MATRIX_ROW_PORT, MATRIX_ROW_MASK);
+	gpio_clear(MATRIX_COL_PORT, MATRIX_COL_PIN);
+	uint16_t val = gpio_port_read(MATRIX_ROW_PORT) & MATRIX_ROW_PIN;
+	gpio_set(MATRIX_COL_PORT, MATRIX_COL_PIN);
+	return val == 0;
 }
 
 int main(void)
@@ -317,7 +343,7 @@ int main(void)
 	}
 
 	rcc_clock_setup_in_hsi_out_48mhz();
-
+	PWR_Init();  // Keep tx on
 	SPI_Init();
 	LCD_Init();
         USB_Init();
@@ -325,6 +351,16 @@ int main(void)
 	usbd_dev = usbd_init(&st_usbfs_v1_usb_driver, &dev, &config, usb_strings, 4, usbd_control_buffer, sizeof(usbd_control_buffer));
 	usbd_register_set_config_callback(usbd_dev, usbdfu_set_config);
 
-	while (1)
+	int32_t debounce = -1;
+	while (1) {
+		if (PORT_pin_get(PWR_SWITCH_PIN)) {
+			if (debounce >= 0)  // Ensure user has released the pin since boot
+				debounce++;
+		} else {
+			debounce = 0;
+		}
+		if (debounce > 100000)
+			PORT_pin_clear(PWR_ENABLE_PIN);
 		usbd_poll(usbd_dev);
+	}
 }
