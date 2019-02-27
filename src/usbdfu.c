@@ -34,6 +34,7 @@ unsigned char __attribute__((section(".version"))) txver[12] = TXVER;
 // I don't want to make the extra 4kB available until I know if the MSC
 // bootloader can fit in 8kB, since that is the expected final-form of the bootloader
 // #define APP_ADDRESS  (LOAD_ADDRESS == 0x08000000 ? 0x08002000 : 0x08006000)
+#define INTERNAL_FLASHADDR 0x08000000
 #define APP_ADDRESS  (LOAD_ADDRESS == 0x08000000 ? 0x08003000 : 0x08006000)
 #if ROMSIZE == 256
     #if LOAD_ADDRESS == 0x08000000
@@ -54,7 +55,12 @@ unsigned char __attribute__((section(".version"))) txver[12] = TXVER;
 #define CMD_ERASE	0x41
 
 extern void LCD_Init();
+extern void SPIFlash_Init();
+extern void SPIFlash_ReadBytes(uint32_t readAddress, uint32_t length, uint8_t * buffer);
+void SPIFlash_WriteBytes(uint32_t writeAddress, uint32_t length, const uint8_t * buffer);
+void SPIFlash_EraseSector(uint32_t sectorAddress);
 
+uint8_t altsetting = 0;
 /* We need a special large control buffer for this device: */
 uint8_t usbd_control_buffer[1024];
 
@@ -93,7 +99,8 @@ const struct usb_dfu_descriptor dfu_function = {
 	.bcdDFUVersion = 0x011A,
 };
 
-const struct usb_interface_descriptor iface = {
+const struct usb_interface_descriptor iface[] = {
+    {
 	.bLength = USB_DT_INTERFACE_SIZE,
 	.bDescriptorType = USB_DT_INTERFACE,
 	.bInterfaceNumber = 0,
@@ -109,12 +116,33 @@ const struct usb_interface_descriptor iface = {
 
 	.extra = &dfu_function,
 	.extralen = sizeof(dfu_function),
+    },
+    {
+	.bLength = USB_DT_INTERFACE_SIZE,
+	.bDescriptorType = USB_DT_INTERFACE,
+	.bInterfaceNumber = 0,
+	.bAlternateSetting = 1,
+	.bNumEndpoints = 0,
+	.bInterfaceClass = 0xFE, /* Device Firmware Upgrade */
+	.bInterfaceSubClass = 1,
+	.bInterfaceProtocol = 2,
+
+	/* The ST Microelectronics DfuSe application needs this string.
+	 * The format isn't documented... */
+	.iInterface = 5,
+
+	.extra = &dfu_function,
+	.extralen = sizeof(dfu_function),
+    }
 };
 
-const struct usb_interface ifaces[] = {{
-	.num_altsetting = 1,
-	.altsetting = &iface,
-}};
+const struct usb_interface ifaces[] = {
+    {
+	.num_altsetting = 2,
+        .cur_altsetting = &altsetting,
+	.altsetting = iface,
+    },
+};
 
 const struct usb_config_descriptor config = {
 	.bLength = USB_DT_CONFIGURATION_SIZE,
@@ -135,6 +163,7 @@ static const char *usb_strings[] = {
 	TXVER,
 	/* This string is used by ST Microelectronics' DfuSe utility. */
 	"@Internal Flash   /0x08000000/" ROM_CFG,
+	"@SPI Flash: Library/0x00002000/030*04Kg",
 };
 
 static uint8_t usbdfu_getstatus(usbd_device *usbd_dev, uint32_t *bwPollTimeout)
@@ -163,13 +192,17 @@ static void usbdfu_getstatus_complete(usbd_device *usbd_dev, struct usb_setup_da
 
 	switch (usbdfu_state) {
 	case STATE_DFU_DNBUSY:
-		flash_unlock();
+		if (altsetting == 0)
+			flash_unlock();
 		if (prog.blocknum == 0) {
 			switch (prog.buf[0]) {
 			case CMD_ERASE:
 				{
 					uint32_t *dat = (uint32_t *)(prog.buf + 1);
-					flash_erase_page(*dat);
+					if (altsetting == 0)
+						flash_erase_page(*dat);
+					else
+						SPIFlash_EraseSector(*dat);
 				}
 			case CMD_SETADDR:
 				{
@@ -180,13 +213,18 @@ static void usbdfu_getstatus_complete(usbd_device *usbd_dev, struct usb_setup_da
 		} else {
 			uint32_t baseaddr = prog.addr + ((prog.blocknum - 2) *
 				       dfu_function.wTransferSize);
-			for (i = 0; i < prog.len; i += 2) {
-				uint16_t *dat = (uint16_t *)(prog.buf + i);
-				flash_program_half_word(baseaddr + i,
-						*dat);
+			if (altsetting == 0) {
+				for (i = 0; i < prog.len; i += 2) {
+					uint16_t *dat = (uint16_t *)(prog.buf + i);
+					flash_program_half_word(baseaddr + i,
+							*dat);
+				}
+			} else {
+				SPIFlash_WriteBytes(baseaddr, prog.len, prog.buf);
 			}
 		}
-		flash_lock();
+		if (altsetting == 0)
+			flash_lock();
 
 		/* Jump straight to dfuDNLOAD-IDLE, skipping dfuDNLOAD-SYNC. */
 		usbdfu_state = STATE_DFU_DNLOAD_IDLE;
@@ -238,7 +276,11 @@ static enum usbd_request_return_codes usbdfu_control_request(usbd_device *usbd_d
 	                // Send back data if only if we enabled that.
 	                // From formula Address_Pointer + ((wBlockNum - 2)*wTransferSize)
 	                uint32_t baseaddr = prog.addr + ((req->wValue - 2) * sizeof(usbd_control_buffer));
-	                memcpy(usbd_control_buffer, (void*)baseaddr, sizeof(usbd_control_buffer));
+                        if (baseaddr >= INTERNAL_FLASHADDR) {
+		                memcpy(usbd_control_buffer, (void*)baseaddr, sizeof(usbd_control_buffer));
+			} else {
+				SPIFlash_ReadBytes(baseaddr, sizeof(usbd_control_buffer), usbd_control_buffer);
+			}
 	                *len = sizeof(usbd_control_buffer);
 	        }
 	        return USBD_REQ_HANDLED;
@@ -365,10 +407,11 @@ int main(void)
 	rcc_clock_setup_in_hsi_out_48mhz();
 	PWR_Init();  // Keep tx on
 	SPI_Init();
+        SPIFlash_Init();
 	LCD_Init();
         USB_Init();
 
-	usbd_dev = usbd_init(&st_usbfs_v1_usb_driver, &dev, &config, usb_strings, 4, usbd_control_buffer, sizeof(usbd_control_buffer));
+	usbd_dev = usbd_init(&st_usbfs_v1_usb_driver, &dev, &config, usb_strings, 5, usbd_control_buffer, sizeof(usbd_control_buffer));
 	usbd_register_set_config_callback(usbd_dev, usbdfu_set_config);
 
 	int32_t debounce = -1;
