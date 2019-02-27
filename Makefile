@@ -26,7 +26,7 @@
 TXVER = "T8SGV2+"
 
 # DISPLAY_TYPE: Type of Display.  Valid values 'OLED' or 'LCD'
-DISPLAY_TYPE = "LCD"
+DISPLAY_TYPE = "OLED"
 
 # ROMSIZE: Size of FLASH rom.  Valid values 128, 256
 ROMSIZE = 256
@@ -36,13 +36,13 @@ ROMSIZE = 256
 #            modifications to deviation to support.
 #            The default value is 0, and should only be changed to 1
 #            if you really know what you are doing
-TWO_STAGE = 0
+TWO_STAGE = 1
 #======================== END OF SETTINGS ===========================
 
 ifeq ($(DISPLAY_TYPE),"OLED")
-    DISPLAY = 128x64x1_nt7538
-else
     DISPLAY = 128x64x1_oled_ssd1306
+else
+    DISPLAY = 128x64x1_nt7538
 endif
 
 PREFIX          ?= arm-none-eabi
