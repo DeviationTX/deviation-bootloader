@@ -24,13 +24,13 @@
 
 uint32_t spiflash_sectors     = 0;
 #if HAS_FLASH_DETECT
-// Defaults for SST25VFxxxB, Devo 10 original memory
-static uint8_t SPIFLASH_SR_ENABLE    = 0x50;
+// Common subset of defaults for flash chip parameters
 static uint8_t SPIFLASH_PROTECT_MASK = 0x3C;
-static uint8_t SPIFLASH_WRITE_SIZE   = 2;
-static uint8_t SPIFLASH_WRITE_CMD    = 0xAD;
-static uint8_t SPIFLASH_FAST_READ    = 0;
-static uint8_t SPIFLASH_USE_AAI      = 1;
+static uint8_t SPIFLASH_WRITE_SIZE   = 1;
+static uint8_t SPIFLASH_WRITE_CMD    = 0x02;
+static uint8_t SPIFLASH_FAST_READ    = 1;
+static uint8_t SPIFLASH_USE_AAI      = 0;
+static uint8_t SPIFLASH_SR_ENABLE    = 0x06;
 #else
     #include "spi_flash.h"
 #endif
@@ -70,69 +70,43 @@ void detect_memory_type()
     switch (mfg_id) {
     case 0xBF: // Microchip
         if (memtype == 0x25) {
+            SPIFLASH_WRITE_SIZE   = 2;
+            SPIFLASH_WRITE_CMD    = 0xAD;
+            SPIFLASH_FAST_READ    = 0;
+            SPIFLASH_USE_AAI      = 1;
+            SPIFLASH_SR_ENABLE    = 0x50;
             spiflash_sectors = 1 << ((capacity & 0x07) + 8);
         }
         if (memtype == 0x26) {
-            SPIFLASH_SR_ENABLE    = 0x06;  //No EWSR, use standard WREN
             SPIFLASH_PROTECT_MASK = 0;
-            SPIFLASH_WRITE_SIZE   = 1;
-            SPIFLASH_WRITE_CMD    = 0x02;
-            SPIFLASH_FAST_READ    = 1;
-            SPIFLASH_USE_AAI      = 0;
             spiflash_sectors = 1 << ((capacity & 0x07) + 8);
         }
         break;
     case 0xEF: // Winbond
         if (memtype == 0x40) {
             SPIFLASH_PROTECT_MASK = 0x1C;
-            SPIFLASH_WRITE_SIZE   = 1;
-            SPIFLASH_WRITE_CMD    = 0x02;
-            SPIFLASH_FAST_READ    = 1;
-            SPIFLASH_USE_AAI      = 0;
+            SPIFLASH_SR_ENABLE    = 0x50;
             spiflash_sectors      = 1 << ((capacity & 0x0f) + 4);
         }
         break;
     case 0x7F: // Extension code, older ISSI, maybe some others
         if (memtype == 0x9D && capacity == 0x46) {
-            SPIFLASH_SR_ENABLE    = 0x06;  //No EWSR, use standard WREN
-            SPIFLASH_PROTECT_MASK = 0x3C;
-            SPIFLASH_WRITE_SIZE   = 1;
-            SPIFLASH_WRITE_CMD    = 0x02;
-            SPIFLASH_FAST_READ    = 1;
-            SPIFLASH_USE_AAI      = 0;
-            spiflash_sectors      = 1 << ((capacity & 0x0f) + 4);
+            SPIFLASH_WRITE_SIZE   = 2;
+            spiflash_sectors      = 1024;
         }
         break;
     case 0x9D: // ISSI
         if (memtype == 0x60 || memtype == 0x40 || memtype == 0x30) {
-            SPIFLASH_SR_ENABLE    = 0x06;  //No EWSR, use standard WREN
-            SPIFLASH_PROTECT_MASK = 0x3C;
-            SPIFLASH_WRITE_SIZE   = 1;
-            SPIFLASH_WRITE_CMD    = 0x02;
-            SPIFLASH_FAST_READ    = 1;
-            SPIFLASH_USE_AAI      = 0;
             spiflash_sectors      = 1 << ((capacity & 0x0f) + 4);
         }
         break;
     case 0xC2: // Macronix
         if (memtype == 0x20) {
-            SPIFLASH_SR_ENABLE    = 0x06;  //No EWSR, use standard WREN
-            SPIFLASH_PROTECT_MASK = 0x3C;
-            SPIFLASH_WRITE_SIZE   = 1;
-            SPIFLASH_WRITE_CMD    = 0x02;
-            SPIFLASH_FAST_READ    = 1;
-            SPIFLASH_USE_AAI      = 0;
             spiflash_sectors      = 1 << ((capacity & 0x0f) + 4);
         }
         break;
     case 0x1F: // Adesto
         if ((memtype & 0xE0) == 0x40) {
-            SPIFLASH_SR_ENABLE    = 0x06;  //No EWSR, use standard WREN
-            SPIFLASH_PROTECT_MASK = 0x3C;
-            SPIFLASH_WRITE_SIZE   = 1;
-            SPIFLASH_WRITE_CMD    = 0x02;
-            SPIFLASH_FAST_READ    = 1;
-            SPIFLASH_USE_AAI      = 0;
             spiflash_sectors      = 1 << ((memtype & 0x1f) + 3);
         }
         break;
@@ -141,8 +115,10 @@ void detect_memory_type()
         id = SPIFlash_ReadID();
         if (id == 0xBF48BF48) {
             SPIFLASH_PROTECT_MASK = 0x0C;
-            SPIFLASH_WRITE_SIZE   = 1;
             SPIFLASH_WRITE_CMD    = 0xAF;
+            SPIFLASH_FAST_READ    = 0;
+            SPIFLASH_USE_AAI      = 1;
+            SPIFLASH_SR_ENABLE    = 0x50;
             spiflash_sectors      = 16;
         }
         break;
