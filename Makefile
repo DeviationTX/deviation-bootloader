@@ -104,5 +104,5 @@ $(OBJS): $(ODIR)/%.o: src/%.c Makefile $(ODIR)
 
 $(LIBOPENCM3):
 	test -s libopencm3/Makefile || { echo "Fetch libopencm3 via 'git submodule update --init'"; exit 1; }
-	+$(FLOCKS) $(MAKE) -C libopencm3 TARGETS=stm32/f1 lib
+	+$(FLOCKS) $(MAKE) -C libopencm3 TARGETS=stm32/f1 FP_FLAGS="-flto" lib
 

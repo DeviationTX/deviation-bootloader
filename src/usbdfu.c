@@ -54,6 +54,7 @@ unsigned char __attribute__((section(".version"))) txver[12] = TXVER;
 #define CMD_SETADDR	0x21
 #define CMD_ERASE	0x41
 
+extern uint32_t spiflash_sectors;
 extern void Periph_Init();
 extern void LCD_Init();
 extern void SPIFlash_Init();
@@ -62,6 +63,8 @@ void SPIFlash_WriteBytes(uint32_t writeAddress, uint32_t length, const uint8_t *
 void SPIFlash_EraseSector(uint32_t sectorAddress);
 
 uint8_t altsetting = 0;
+char spi_flash_dfu_sring[] = "@SPI Flash: Library/0x00000000/000*04Kg";
+
 /* We need a special large control buffer for this device: */
 uint8_t usbd_control_buffer[1024];
 
@@ -164,7 +167,7 @@ static const char *usb_strings[] = {
 	TXVER,
 	/* This string is used by ST Microelectronics' DfuSe utility. */
 	"@Internal Flash   /0x08000000/" ROM_CFG,
-	"@SPI Flash: Library/0x00002000/030*04Kg",
+        spi_flash_dfu_sring,
 };
 
 static uint8_t usbdfu_getstatus(usbd_device *usbd_dev, uint32_t *bwPollTimeout)
@@ -193,8 +196,7 @@ static void usbdfu_getstatus_complete(usbd_device *usbd_dev, struct usb_setup_da
 
 	switch (usbdfu_state) {
 	case STATE_DFU_DNBUSY:
-		if (altsetting == 0)
-			flash_unlock();
+		flash_unlock();
 		if (prog.blocknum == 0) {
 			switch (prog.buf[0]) {
 			case CMD_ERASE:
@@ -214,7 +216,7 @@ static void usbdfu_getstatus_complete(usbd_device *usbd_dev, struct usb_setup_da
 		} else {
 			uint32_t baseaddr = prog.addr + ((prog.blocknum - 2) *
 				       dfu_function.wTransferSize);
-			if (altsetting == 0) {
+                        if (baseaddr >= INTERNAL_FLASHADDR) {
 				for (i = 0; i < prog.len; i += 2) {
 					uint16_t *dat = (uint16_t *)(prog.buf + i);
 					flash_program_half_word(baseaddr + i,
@@ -224,8 +226,7 @@ static void usbdfu_getstatus_complete(usbd_device *usbd_dev, struct usb_setup_da
 				SPIFlash_WriteBytes(baseaddr, prog.len, prog.buf);
 			}
 		}
-		if (altsetting == 0)
-			flash_lock();
+		flash_lock();
 
 		/* Jump straight to dfuDNLOAD-IDLE, skipping dfuDNLOAD-SYNC. */
 		usbdfu_state = STATE_DFU_DNLOAD_IDLE;
@@ -355,10 +356,16 @@ int main(void)
         SPIFlash_Init();
 	LCD_Init();
 
+        uint32_t val = spiflash_sectors;
+        char *ptr = spi_flash_dfu_sring + 31;
+        for (int i = 0; i < 3; i++) {
+            ptr[2-i] = (val % 10) + '0';
+            val = val / 10;
+        }
 	usbd_dev = usbd_init(&st_usbfs_v1_usb_driver, &dev, &config, usb_strings, 5, usbd_control_buffer, sizeof(usbd_control_buffer));
 	usbd_register_set_config_callback(usbd_dev, usbdfu_set_config);
 
-	int32_t debounce = -1;
+	int debounce = -1;
 	while (1) {
 		if (PORT_pin_get(PWR_SWITCH_PIN)) {
 			if (debounce >= 0)  // Ensure user has released the pin since boot
