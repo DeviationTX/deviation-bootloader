@@ -58,6 +58,7 @@ extern uint32_t spiflash_sectors;
 extern void Periph_Init();
 extern void LCD_Init();
 extern void SPIFlash_Init();
+extern void SPIFlash_BlockWriteEnable(unsigned enable);
 extern void SPIFlash_ReadBytes(uint32_t readAddress, uint32_t length, uint8_t * buffer);
 void SPIFlash_WriteBytes(uint32_t writeAddress, uint32_t length, const uint8_t * buffer);
 void SPIFlash_EraseSector(uint32_t sectorAddress);
@@ -355,6 +356,7 @@ int main(void)
         Periph_Init();
         SPIFlash_Init();
 	LCD_Init();
+	SPIFlash_BlockWriteEnable(1);
 
         uint32_t val = spiflash_sectors;
         char *ptr = spi_flash_dfu_sring + 31;
