@@ -70,10 +70,10 @@ ODIR = objs/$(TXVERlc)
 CFLAGS = -D'TXVER=$(TXVER)' -DROMSIZE=$(ROMSIZE) -DLOAD_ADDRESS=$(LOAD_ADDRESS) \
          -Os -std=gnu99 -ggdb3 -mthumb -mcpu=cortex-m3 -msoft-float -mfix-cortex-m3-ldrd \
          -Wextra -Wshadow -Wimplicit-function-declaration -Wredundant-decls \
-         -fno-common -ffunction-sections -fdata-sections -flto -MD -Wall -Wundef \
-         -DSTM32F1 -Ilibopencm3//include
+         -fno-common -ffunction-sections -fdata-sections -MD -Wall -Wundef \
+         -DSTM32F1 -Ilibopencm3//include -flto
 
-SRC    = usbdfu.c spi_flash.c $(DISPLAY).c
+SRC    = usbdfu.c init.c periph_init.c spi_flash.c $(DISPLAY).c
 OBJS   = $(addprefix $(ODIR)/, $(SRC:.c=.o))
 
 all: $(TARGET).dfu

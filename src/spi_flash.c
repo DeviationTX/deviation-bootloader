@@ -100,7 +100,7 @@ void detect_memory_type()
             SPIFLASH_WRITE_CMD    = 0x02;
             SPIFLASH_FAST_READ    = 1;
             SPIFLASH_USE_AAI      = 0;
-            spiflash_sectors      = 1024;
+            spiflash_sectors      = 1 << ((capacity & 0x0f) + 4);
         }
         break;
     case 0x9D: // ISSI
@@ -149,19 +149,17 @@ void detect_memory_type()
     }
 }
 #endif
+
 /*
  *
  */
 void SPIFlash_Init()
 {
-    /* Enable SPIx */
-    rcc_periph_clock_enable(RCC_GPIOB);  // Assume sck, mosi, miso all on same port
-    PORT_mode_setup(FLASH_CSN_PIN, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_PUSHPULL);
-    CS_HI();
 #if HAS_FLASH_DETECT
     detect_memory_type();
 #endif
 }
+
 /*
  *
  */
