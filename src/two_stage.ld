@@ -6,7 +6,10 @@ MEMORY
 }
 
 /* Enforce emmition of the vector table. */
-EXTERN (vector_table)
+EXTERN (small_vector_table)
+
+/* Enforce emmission of the tx string. */
+EXTERN (txver)
 
 /* Define the entry point of the output file. */
 ENTRY(reset_handler)
@@ -15,7 +18,7 @@ ENTRY(reset_handler)
 SECTIONS
 {
 	.text : {
-		*(.vectors)		/* Vector table */
+		*(.smallvectors)	/* Vector table */
 		KEEP(*(.version))	/* Transmitter version */
 		*(.text*)		/* Program code */
 	} >rom

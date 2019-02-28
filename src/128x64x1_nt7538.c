@@ -90,22 +90,10 @@ void LCD_Contrast(unsigned contrast)
     LCD_Cmd(c);
 }
 
-static void backlight_init()
-{
-    rcc_periph_clock_enable(RCC_GPIOB);
-    PORT_mode_setup(BACKLIGHT_PIN, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_PUSHPULL);
-    PORT_pin_set(BACKLIGHT_PIN);
-}
-
 #include "draw_splash.h"
 
 void LCD_Init()
 {
-    //Initialization is mostly done in SPI Flash
-    //Setup CS as B.0 Data/Control = C.5
-    rcc_periph_clock_enable(RCC_GPIOB);
-    rcc_periph_clock_enable(RCC_GPIOC);
-    PORT_mode_setup(LCD_CMD_PIN, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_PUSHPULL);
     LCD_Cmd(0xE2);  //Reset
     volatile int i = 0x8000;
     while(i) i--;
@@ -129,5 +117,4 @@ void LCD_Init()
     lcd_display(1);
     draw_splash();
     LCD_Contrast(5);
-    backlight_init();
 }

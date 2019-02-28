@@ -34,6 +34,7 @@ unsigned char __attribute__((section(".version"))) txver[12] = TXVER;
 // I don't want to make the extra 4kB available until I know if the MSC
 // bootloader can fit in 8kB, since that is the expected final-form of the bootloader
 // #define APP_ADDRESS  (LOAD_ADDRESS == 0x08000000 ? 0x08002000 : 0x08006000)
+#define INTERNAL_FLASHADDR 0x08000000
 #define APP_ADDRESS  (LOAD_ADDRESS == 0x08000000 ? 0x08003000 : 0x08006000)
 #if ROMSIZE == 256
     #if LOAD_ADDRESS == 0x08000000
@@ -53,7 +54,17 @@ unsigned char __attribute__((section(".version"))) txver[12] = TXVER;
 #define CMD_SETADDR	0x21
 #define CMD_ERASE	0x41
 
+extern uint32_t spiflash_sectors;
+extern void Periph_Init();
 extern void LCD_Init();
+extern void SPIFlash_Init();
+extern void SPIFlash_BlockWriteEnable(unsigned enable);
+extern void SPIFlash_ReadBytes(uint32_t readAddress, uint32_t length, uint8_t * buffer);
+void SPIFlash_WriteBytes(uint32_t writeAddress, uint32_t length, const uint8_t * buffer);
+void SPIFlash_EraseSector(uint32_t sectorAddress);
+
+uint8_t altsetting = 0;
+char spi_flash_dfu_sring[] = "@SPI Flash: Library/0x00000000/000*04Kg";
 
 /* We need a special large control buffer for this device: */
 uint8_t usbd_control_buffer[1024];
@@ -93,7 +104,8 @@ const struct usb_dfu_descriptor dfu_function = {
 	.bcdDFUVersion = 0x011A,
 };
 
-const struct usb_interface_descriptor iface = {
+const struct usb_interface_descriptor iface[] = {
+    {
 	.bLength = USB_DT_INTERFACE_SIZE,
 	.bDescriptorType = USB_DT_INTERFACE,
 	.bInterfaceNumber = 0,
@@ -109,12 +121,33 @@ const struct usb_interface_descriptor iface = {
 
 	.extra = &dfu_function,
 	.extralen = sizeof(dfu_function),
+    },
+    {
+	.bLength = USB_DT_INTERFACE_SIZE,
+	.bDescriptorType = USB_DT_INTERFACE,
+	.bInterfaceNumber = 0,
+	.bAlternateSetting = 1,
+	.bNumEndpoints = 0,
+	.bInterfaceClass = 0xFE, /* Device Firmware Upgrade */
+	.bInterfaceSubClass = 1,
+	.bInterfaceProtocol = 2,
+
+	/* The ST Microelectronics DfuSe application needs this string.
+	 * The format isn't documented... */
+	.iInterface = 5,
+
+	.extra = &dfu_function,
+	.extralen = sizeof(dfu_function),
+    }
 };
 
-const struct usb_interface ifaces[] = {{
-	.num_altsetting = 1,
-	.altsetting = &iface,
-}};
+const struct usb_interface ifaces[] = {
+    {
+	.num_altsetting = 2,
+        .cur_altsetting = &altsetting,
+	.altsetting = iface,
+    },
+};
 
 const struct usb_config_descriptor config = {
 	.bLength = USB_DT_CONFIGURATION_SIZE,
@@ -135,6 +168,7 @@ static const char *usb_strings[] = {
 	TXVER,
 	/* This string is used by ST Microelectronics' DfuSe utility. */
 	"@Internal Flash   /0x08000000/" ROM_CFG,
+        spi_flash_dfu_sring,
 };
 
 static uint8_t usbdfu_getstatus(usbd_device *usbd_dev, uint32_t *bwPollTimeout)
@@ -169,7 +203,10 @@ static void usbdfu_getstatus_complete(usbd_device *usbd_dev, struct usb_setup_da
 			case CMD_ERASE:
 				{
 					uint32_t *dat = (uint32_t *)(prog.buf + 1);
-					flash_erase_page(*dat);
+					if (altsetting == 0)
+						flash_erase_page(*dat);
+					else
+						SPIFlash_EraseSector(*dat);
 				}
 			case CMD_SETADDR:
 				{
@@ -180,10 +217,14 @@ static void usbdfu_getstatus_complete(usbd_device *usbd_dev, struct usb_setup_da
 		} else {
 			uint32_t baseaddr = prog.addr + ((prog.blocknum - 2) *
 				       dfu_function.wTransferSize);
-			for (i = 0; i < prog.len; i += 2) {
-				uint16_t *dat = (uint16_t *)(prog.buf + i);
-				flash_program_half_word(baseaddr + i,
-						*dat);
+                        if (baseaddr >= INTERNAL_FLASHADDR) {
+				for (i = 0; i < prog.len; i += 2) {
+					uint16_t *dat = (uint16_t *)(prog.buf + i);
+					flash_program_half_word(baseaddr + i,
+							*dat);
+				}
+			} else {
+				SPIFlash_WriteBytes(baseaddr, prog.len, prog.buf);
 			}
 		}
 		flash_lock();
@@ -238,7 +279,11 @@ static enum usbd_request_return_codes usbdfu_control_request(usbd_device *usbd_d
 	                // Send back data if only if we enabled that.
 	                // From formula Address_Pointer + ((wBlockNum - 2)*wTransferSize)
 	                uint32_t baseaddr = prog.addr + ((req->wValue - 2) * sizeof(usbd_control_buffer));
-	                memcpy(usbd_control_buffer, (void*)baseaddr, sizeof(usbd_control_buffer));
+                        if (baseaddr >= INTERNAL_FLASHADDR) {
+		                memcpy(usbd_control_buffer, (void*)baseaddr, sizeof(usbd_control_buffer));
+			} else {
+				SPIFlash_ReadBytes(baseaddr, sizeof(usbd_control_buffer), usbd_control_buffer);
+			}
 	                *len = sizeof(usbd_control_buffer);
 	        }
 	        return USBD_REQ_HANDLED;
@@ -275,64 +320,9 @@ static void usbdfu_set_config(usbd_device *usbd_dev, uint16_t wValue)
 				usbdfu_control_request);
 }
 
-static void PWR_Init()
-{
-    rcc_periph_clock_enable(RCC_GPIOA);
-
-    /* Pin controls power-down */
-    PORT_mode_setup(PWR_ENABLE_PIN, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_PUSHPULL);
-    /* Enable GPIOA.2 to keep from shutting down */
-    PORT_pin_set(PWR_ENABLE_PIN);
-
-    /* When Pin goes high, the user turned off the Tx */
-    PORT_mode_setup(PWR_SWITCH_PIN, GPIO_MODE_INPUT, GPIO_CNF_INPUT_FLOAT);
-}
-
-static void SPI_Init()
-{
-    /* Enable SPIx */
-    rcc_periph_clock_enable(RCC_SPIx);
-    /* Enable GPIOA */
-    rcc_periph_clock_enable(RCC_GPIOA);
-    /* Enable GPIOB */
-    rcc_periph_clock_enable(RCC_GPIOB);
-
-    PORT_mode_setup(FLASH_CSN_PIN,  GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_PUSHPULL);
-    PORT_mode_setup(LCD_CSN_PIN,  GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_PUSHPULL);
-    PORT_mode_setup(SPIx_SCK_PIN,  GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_ALTFN_PUSHPULL);
-    PORT_mode_setup(SPIx_MOSI_PIN, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_ALTFN_PUSHPULL);
-    PORT_mode_setup(SPIx_MISO_PIN, GPIO_MODE_INPUT,         GPIO_CNF_INPUT_FLOAT);
-    PORT_pin_set(FLASH_CSN_PIN);
-    PORT_pin_set(LCD_CSN_PIN);
-
-    /* Includes enable */
-    spi_init_master(SPIx, 
-                    SPI_CR1_BAUDRATE_FPCLK_DIV_8,
-                    SPI_CR1_CPOL_CLK_TO_0_WHEN_IDLE,
-                    SPI_CR1_CPHA_CLK_TRANSITION_1, 
-                    SPI_CR1_DFF_8BIT,
-                    SPI_CR1_MSBFIRST);
-    spi_enable_software_slave_management(SPIx);
-    spi_set_nss_high(SPIx);
-
-    spi_enable(SPIx);
-}
-
-static void USB_Init()
-{
-    rcc_periph_clock_enable(RCC_GPIOB);
-    rcc_periph_clock_enable(RCC_GPIOA);
-    rcc_periph_clock_enable(RCC_OTGFS);
-
-    PORT_mode_setup(((struct mcu_pin){GPIOA, GPIO11 | GPIO12}), GPIO_MODE_INPUT, GPIO_CNF_INPUT_FLOAT);
-    PORT_mode_setup(((struct mcu_pin){GPIOB, GPIO10}), GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_PUSHPULL);
-    gpio_clear(GPIOB, GPIO10);
-}
-
 static int check_button_press(void)
 {
-	rcc_periph_clock_enable(RCC_MATRIX_ROW);
-	rcc_periph_clock_enable(RCC_MATRIX_COL);
+        rcc_peripheral_enable_clock(&RCC_APB2ENR, RCC_APB2ENR_IOPCEN | RCC_APB2ENR_IOPBEN);
 	gpio_set_mode(MATRIX_COL_PORT, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_OPENDRAIN,
 		MATRIX_COL_MASK);
 	gpio_set(MATRIX_COL_PORT, MATRIX_COL_MASK);
@@ -363,15 +353,21 @@ int main(void)
 	}
 
 	rcc_clock_setup_in_hsi_out_48mhz();
-	PWR_Init();  // Keep tx on
-	SPI_Init();
+        Periph_Init();
+        SPIFlash_Init();
 	LCD_Init();
-        USB_Init();
+	SPIFlash_BlockWriteEnable(1);
 
-	usbd_dev = usbd_init(&st_usbfs_v1_usb_driver, &dev, &config, usb_strings, 4, usbd_control_buffer, sizeof(usbd_control_buffer));
+        uint32_t val = spiflash_sectors;
+        char *ptr = spi_flash_dfu_sring + 31;
+        for (int i = 0; i < 3; i++) {
+            ptr[2-i] = (val % 10) + '0';
+            val = val / 10;
+        }
+	usbd_dev = usbd_init(&st_usbfs_v1_usb_driver, &dev, &config, usb_strings, 5, usbd_control_buffer, sizeof(usbd_control_buffer));
 	usbd_register_set_config_callback(usbd_dev, usbdfu_set_config);
 
-	int32_t debounce = -1;
+	int debounce = -1;
 	while (1) {
 		if (PORT_pin_get(PWR_SWITCH_PIN)) {
 			if (debounce >= 0)  // Ensure user has released the pin since boot

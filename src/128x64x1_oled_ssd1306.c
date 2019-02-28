@@ -87,12 +87,6 @@ void LCD_Contrast(unsigned contrast)
 
 void LCD_Init()
 {
-    //Initialization is mostly done in SPI Flash
-    //Setup CS as B.0 Data/Control = C.5
-    rcc_periph_clock_enable(RCC_GPIOB);
-    rcc_periph_clock_enable(RCC_GPIOC);
-    PORT_mode_setup(LCD_CSN_PIN, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_PUSHPULL);
-    PORT_mode_setup(LCD_CMD_PIN, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_PUSHPULL);
     volatile int i = 0x8000;
     while(i) i--;
     lcd_display(0); //Display Off
