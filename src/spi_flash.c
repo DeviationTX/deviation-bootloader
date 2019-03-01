@@ -91,7 +91,6 @@ void detect_memory_type()
         break;
     case 0x7F: // Extension code, older ISSI, maybe some others
         if (memtype == 0x9D && capacity == 0x46) {
-            SPIFLASH_WRITE_SIZE   = 2;
             spiflash_sectors      = 1024;
         }
         break;
