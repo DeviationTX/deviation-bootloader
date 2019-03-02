@@ -28,9 +28,12 @@ struct mcu_pin {
 #define RCC_MATRIX_ROW  RCC_GPIOC
 #define MATRIX_COL_PORT GPIOB
 #define MATRIX_ROW_PORT GPIOC
-//#define MATRIX_COL_PIN  GPIO6   // ENT
-#define MATRIX_COL_PIN  GPIO8     // DN
-#define MATRIX_ROW_PIN  GPIO7
+#define MATRIX_COL_PIN  GPIO8
+#if USE_EXT_BUTTON
+    #define MATRIX_ROW_PIN  GPIO9     // EXT
+#else
+    #define MATRIX_ROW_PIN  GPIO7     // DN
+#endif
 #define MATRIX_COL_MASK (GPIO5 | GPIO6 | GPIO7 | GPIO8)
 #define MATRIX_ROW_MASK (GPIO6 | GPIO7 | GPIO8 | GPIO9)
 

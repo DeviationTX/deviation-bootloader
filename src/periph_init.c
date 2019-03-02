@@ -4,14 +4,14 @@
 #include <libopencm3/usb/usbd.h>
 #include "hardware.h"
 
-static void backlight_init()
+static inline void backlight_init()
 {
     // rcc_periph_clock_enable(RCC_GPIOB);
     PORT_mode_setup(BACKLIGHT_PIN, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_PUSHPULL);
     PORT_pin_set(BACKLIGHT_PIN);
 }
 
-static void spiflash_init()
+static inline void spiflash_init()
 {
     /* Enable SPIx */
     // rcc_periph_clock_enable(RCC_GPIOB);  // Assume sck, mosi, miso all on same port
@@ -19,7 +19,7 @@ static void spiflash_init()
     PORT_pin_set(FLASH_CSN_PIN);
 }
 
-static void lcd_init()
+static inline void lcd_init()
 {
     //Initialization is mostly done in SPI Flash
     //Setup CS as B.0 Data/Control = C.5
@@ -29,7 +29,7 @@ static void lcd_init()
     PORT_mode_setup(LCD_CMD_PIN, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_PUSHPULL);
 }
 
-static void spi_init()
+static inline void spi_init()
 {
     /* Enable SPIx */
     // rcc_periph_clock_enable(RCC_SPIx);
@@ -59,7 +59,7 @@ static void spi_init()
     spi_enable(SPIx);
 }
 
-static void usb_init()
+static inline void usb_init()
 {
     // rcc_periph_clock_enable(RCC_GPIOB);
     // rcc_periph_clock_enable(RCC_GPIOA);
@@ -70,7 +70,7 @@ static void usb_init()
     // gpio_clear(GPIOB, GPIO10);
 }
 
-static void pwr_init()
+static inline void pwr_init()
 {
     // rcc_periph_clock_enable(RCC_GPIOA);
 

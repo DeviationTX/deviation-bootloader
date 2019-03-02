@@ -163,8 +163,8 @@ const struct usb_config_descriptor config = {
 };
 
 static const char *usb_strings[] = {
-	"Jumper",
-	"T8SG Deviation Bootloader",
+	MANUFACTURER,
+	"Deviation Bootloader",
 	TXVER,
 	/* This string is used by ST Microelectronics' DfuSe utility. */
 	"@Internal Flash   /0x08000000/" ROM_CFG,

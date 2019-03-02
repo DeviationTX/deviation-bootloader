@@ -13,7 +13,7 @@ typedef struct {
     vector_table_entry_t reset;
 } small_vector_table_t;
 
-void main(void);
+int main(void);
 
 void reset_handler(void)
 {
