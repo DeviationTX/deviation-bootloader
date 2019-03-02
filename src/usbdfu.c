@@ -28,6 +28,7 @@
 #include "hardware.h"
 
 unsigned char __attribute__((section(".version"))) txver[12] = TXVER;
+#define BOOTLOADER_VERSION "1.0"
 
 ///////////////////////////////////////////////////////////////////////////////
 // For now the bootloader reserves 12kB even though it fits in 8kB
@@ -164,7 +165,7 @@ const struct usb_config_descriptor config = {
 
 static const char *usb_strings[] = {
 	MANUFACTURER,
-	"Deviation Bootloader",
+	"Deviation Bootloader " BOOTLOADER_VERSION,
 	TXVER,
 	/* This string is used by ST Microelectronics' DfuSe utility. */
 	"@Internal Flash   /0x08000000/" ROM_CFG,

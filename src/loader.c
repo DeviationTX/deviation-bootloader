@@ -92,6 +92,17 @@ int main(void)
 
     flash_lock();
 
+    /* Boot the bootloaderd. */
+    if ((*(volatile uint32_t *)LOAD_ADDRESS & 0x2FFE0000) == 0x20000000) {
+        /* Set vector table base address. */
+        SCB_VTOR = LOAD_ADDRESS & 0xFFFF;
+        /* Initialise master stack pointer. */
+        asm volatile("msr msp, %0"::"g"
+            (*(volatile uint32_t *)LOAD_ADDRESS));
+        /* Jump to bootloader. */
+        (*(void (**)())(LOAD_ADDRESS + 4))();
+    }
+    /* Getting here is bad! */
     while(1) {
         volatile unsigned j = 1000000;
         while(--j) {
