@@ -26,14 +26,14 @@
 TXVER ?= T8SGV2
 
 # ROMSIZE: Size of FLASH rom.  Valid values 128, 256
-ROMSIZE = 256
+ROMSIZE ?= 256
 
 # TWO_STAGE: Whether to load the bootloader after the Walkera bootloader
 #            This should only be used for testing as it requires
 #            modifications to deviation to support.
 #            The default value is 0, and should only be changed to 1
 #            if you really know what you are doing
-TWO_STAGE = 0
+TWO_STAGE ?= 0
 
 # DISPLAY_TYPE: Type of Display.  Valid values 'OLED' or 'LCD'
 # This value can be auto-detected based on the value of TXVER
@@ -113,7 +113,7 @@ clean:
 	rm $(ODIR)/* 2> /dev/null || /bin/true
 
 distclean:
-	rm objs/* 2> /dev/null || /bin/true
+	rm -rf objs/* 2> /dev/null || /bin/true
 	rm *.dfu *.bin 2> /dev/null || /bin/true
 
 $(OBJS): | $(ODIR)
