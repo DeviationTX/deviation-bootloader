@@ -23,7 +23,7 @@
 # TVXER: Unique string used by Deviation to identify transmitter
 #        Known Values: T8SGV1, T8SGV2, T8SGV2+, T8SGV3, T8SGV3+,
 #                      DEVO7E, DEVO7E-256
-TXVER = "T8SGV2"
+TXVER ?= T8SGV2
 
 # ROMSIZE: Size of FLASH rom.  Valid values 128, 256
 ROMSIZE = 256
@@ -95,7 +95,7 @@ else
 endif
 
 ODIR = objs/$(TXVERlc)
-CFLAGS = -D'TXVER=$(TXVER)' -DROMSIZE=$(ROMSIZE) -DLOAD_ADDRESS=$(LOAD_ADDRESS) \
+CFLAGS = -D'TXVER="$(TXVER)"' -DROMSIZE=$(ROMSIZE) -DLOAD_ADDRESS=$(LOAD_ADDRESS) \
          -DHAS_LCD_FLIPPED=$(HAS_LCD_FLIPPED) -DUSE_EXT_BUTTON=$(EXT_BUTTON) -D'MANUFACTURER=$(MANUFACTURER)' \
          -Os -std=gnu99 -ggdb3 -mthumb -mcpu=cortex-m3 -msoft-float -mfix-cortex-m3-ldrd \
          -Wextra -Wshadow -Wimplicit-function-declaration -Wredundant-decls \
