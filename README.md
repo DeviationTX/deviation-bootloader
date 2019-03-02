@@ -1,7 +1,9 @@
 # deviation-bootloader
 Replacement Bootloader for Deviation supported transmitters.
-*NOTE: Unless you are a developer, you should NOT install this bootloader yet!*
-*Installing this bootloader requires a custom Deviation build to enable, which is not provided by current nightlies*
+
+**NOTE: Unless you are a developer, you should NOT install this bootloader yet!**
+
+**Installing this bootloader requires a custom Deviation build to enable, which is not provided by current nightlies**
 
 This bootloader currently provides the following functionality for supported transmitters:
  * LCD display when in bootloader mode
