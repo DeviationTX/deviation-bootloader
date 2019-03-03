@@ -123,10 +123,14 @@ $(ODIR):
 
 $(TARGET).dfu: $(ODIR)/$(TARGET).bin
 	./utils/dfu.py --name "$(TXVERlc) Bootloader Firmware" -c $(DFU_ENCRYPT_VAL) -b $(LOAD_ADDRESS):$< $@
-	./utils/get_mem_usage.pl $(ODIR)/$(TARGET).map
 
 $(ODIR)/$(TARGET).elf: $(OBJS) src/hardware.h $(LIBOPENCM3)
-	$(CC) --static -nostartfiles -Tsrc/$(LDSCRIPT) $(CFLAGS) -Wl,-Map=$(ODIR)/$(TARGET).map -Wl,--cref -Wl,--gc-sections -Llibopencm3/lib $(OBJS) -lopencm3_stm32f1 -Wl,--start-group -lc -lgcc -lnosys -Wl,--end-group -o $@
+	rm optimixe.ld 2> /dev/null || /bin/true
+	touch $(ODIR)/optimize.ld
+	$(CC) --static -nostartfiles -L $(ODIR) -Tsrc/$(LDSCRIPT) $(CFLAGS) -Wl,-Map=$(ODIR)/$(TARGET).map -Wl,--cref -Wl,--gc-sections -Llibopencm3/lib $(OBJS) -lopencm3_stm32f1 -Wl,--start-group -lc -lgcc -lnosys -Wl,--end-group -o $@
+	./utils/repack_ld.pl -mapfile $(ODIR)/$(TARGET).map -size 0x400 > $(ODIR)/optimize.ld
+	$(CC) --static -nostartfiles -L $(ODIR) -Tsrc/$(LDSCRIPT) $(CFLAGS) -Wl,-Map=$(ODIR)/$(TARGET).map -Wl,--cref -Wl,--gc-sections -Llibopencm3/lib $(OBJS) -lopencm3_stm32f1 -Wl,--start-group -lc -lgcc -lnosys -Wl,--end-group -o $@
+	./utils/get_mem_usage.pl $(ODIR)/$(TARGET).map
 
 $(OBJS): $(ODIR)/%.o: src/%.c Makefile
 	$(CC) $(CFLAGS) -c -o $@ $<

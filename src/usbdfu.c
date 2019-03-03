@@ -279,13 +279,14 @@ static enum usbd_request_return_codes usbdfu_control_request(usbd_device *usbd_d
 	        } else {
 	                // Send back data if only if we enabled that.
 	                // From formula Address_Pointer + ((wBlockNum - 2)*wTransferSize)
+                        uint32_t len_data = (req->wLength > sizeof(usbd_control_buffer)) ? sizeof(usbd_control_buffer) : req->wLength;
 	                uint32_t baseaddr = prog.addr + ((req->wValue - 2) * sizeof(usbd_control_buffer));
                         if (baseaddr >= INTERNAL_FLASHADDR) {
-		                memcpy(usbd_control_buffer, (void*)baseaddr, sizeof(usbd_control_buffer));
+		                memcpy(usbd_control_buffer, (void*)baseaddr, len_data);
 			} else {
-				SPIFlash_ReadBytes(baseaddr, sizeof(usbd_control_buffer), usbd_control_buffer);
+				SPIFlash_ReadBytes(baseaddr, len_data, usbd_control_buffer);
 			}
-	                *len = sizeof(usbd_control_buffer);
+	                *len = len_data;
 	        }
 	        return USBD_REQ_HANDLED;
 	case DFU_GETSTATUS: {

@@ -19,6 +19,8 @@ SECTIONS
 {
 	.text : {
 		*(.smallvectors)	/* Vector table */
+                INCLUDE optimize.ld
+                . = 0x400;
 		KEEP(*(.version))	/* Transmitter version */
 		*(.text*)		/* Program code */
 	} >rom
