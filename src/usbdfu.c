@@ -208,6 +208,7 @@ static void usbdfu_getstatus_complete(usbd_device *usbd_dev, struct usb_setup_da
 						flash_erase_page(*dat);
 					else
 						SPIFlash_EraseSector(*dat);
+					break;
 				}
 			case CMD_SETADDR:
 				{
@@ -325,6 +326,9 @@ static void usbdfu_set_config(usbd_device *usbd_dev, uint16_t wValue)
 static int check_button_press(void)
 {
         rcc_peripheral_enable_clock(&RCC_APB2ENR, RCC_APB2ENR_IOPCEN | RCC_APB2ENR_IOPBEN);
+	gpio_set_mode(GPIOB, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_PUSHPULL,
+		GPIO11);
+	gpio_set(GPIOB, GPIO11);
 	gpio_set_mode(MATRIX_COL_PORT, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_OPENDRAIN,
 		MATRIX_COL_MASK);
 	gpio_set(MATRIX_COL_PORT, MATRIX_COL_MASK);
@@ -334,12 +338,15 @@ static int check_button_press(void)
 	gpio_clear(MATRIX_COL_PORT, MATRIX_COL_PIN);
 	uint16_t val = gpio_port_read(MATRIX_ROW_PORT) & MATRIX_ROW_PIN;
 	gpio_set(MATRIX_COL_PORT, MATRIX_COL_PIN);
+	gpio_clear(GPIOB, GPIO11);
 	return val == 0;
 }
 
 int main(void)
 {
 	usbd_device *usbd_dev;
+	// For backward compatibility
+	rcc_peripheral_enable_clock(&RCC_APB2ENR, RCC_APB2ENR_AFIOEN);
 
 	if (! check_button_press()) {
 		/* Boot the application if it's valid. */

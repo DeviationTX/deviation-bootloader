@@ -24,13 +24,12 @@ This bootloader currently provides the following functionality for supported tra
  * Devo7e: `make TXVER=DEVO7E`
  * Devo7e w/256k: `make TXVER=DEVO7E-256`
 
-### Installing
+### Installing the bootloader
 If you currently have the default Walkera/Jumper Bootloader installed:
  * Install `installer-enc-<target>.dfu` using Deviation-Uploader
 
-If you currently have an older version of Deviation Bootloader:
-  * Install `installer-<target>.dfu` via:
-  `dfu-util -a0 -D installer-<target>.dfu`
+If you currently have an older version of Deviation Bootloader (>= 0.10.0):
+ * Install `installer-<target>.dfu` using Deviation-Uploader
 
 ### Developer testing
 If you would like to preserve your existing bootloader, we currently support a two-stage bootload option.
@@ -39,9 +38,10 @@ bootloader!  You cannot load any other builds when using this mode of operation
 
 ### Installing a deviation build when using deviation-bootloader
 Encryption must be removed prior to installing a new firmware when using the Deviation Bootloader.
-This can be done by rerunniing `utils/dfu.py` with `-c 0`.  For example.  To install the stock t8sg-v2+ image
+This can be done by re-runniing `utils/dfu.py` with `-c 0` and with 'Unified' in the description string.
+For example, to install the stock t8sg-v2+ image
 after installing deviation-bootloader:
 ```
 make t8sg_v2_plus
-./../utils/dfu.py --name "t8sg_v2_plus-v5.0.0-xxxxxxx Firmware" -c 0 -b 0x08003000:t8sg_v2_plus.bin t8sg_v2_plus.dfu
+./../utils/dfu.py --name "t8sg_v2_plus-v5.0.0-xxxxxxx Unified Firmware" -c 0 -b 0x08003000:t8sg_v2_plus.bin t8sg_v2_plus.dfu
 ```

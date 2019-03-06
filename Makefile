@@ -122,7 +122,7 @@ $(ODIR):
 	@mkdir -p $@
 
 $(TARGET).dfu: $(ODIR)/$(TARGET).bin
-	./utils/dfu.py --name "$(TXVERlc) Bootloader Firmware" -c $(DFU_ENCRYPT_VAL) -b $(LOAD_ADDRESS):$< $@
+	./utils/dfu.py --name "$(TXVERlc) Bootloader" -c $(DFU_ENCRYPT_VAL) -b $(LOAD_ADDRESS):$< $@
 
 $(ODIR)/$(TARGET).elf: $(OBJS) src/hardware.h $(LIBOPENCM3)
 	rm optimixe.ld 2> /dev/null || /bin/true
@@ -153,7 +153,7 @@ $(ODIR)/loader.o: src/loader.c Makefile
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 installer-$(TARGET).dfu: $(ODIR)/loader.bin
-	./utils/dfu.py --name "$(TXVERlc) Bootloader Installer" -c 0 -b $(INST_ADDRESS):$< $@
+	./utils/dfu.py --name "$(TXVERlc) Unified Bootloader Installer" -c 0 -b $(INST_ADDRESS):$< $@
 
 installer-enc-$(TARGET).dfu: $(ODIR)/loader.bin
 	./utils/dfu.py --name "$(TXVERlc) Bootloader Installer" -c $(DFU_ENCRYPT_VAL) -b $(INST_ADDRESS):$< $@
