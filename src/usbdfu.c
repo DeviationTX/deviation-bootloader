@@ -37,6 +37,7 @@ unsigned char __attribute__((section(".version"))) txver[12] = TXVER;
 // #define APP_ADDRESS  (LOAD_ADDRESS == 0x08000000 ? 0x08002000 : 0x08006000)
 #define INTERNAL_FLASHADDR 0x08000000
 #define APP_ADDRESS  (LOAD_ADDRESS == 0x08000000 ? 0x08003000 : 0x08006000)
+#define PROTECT_FLASH_SIZE 0x2000
 #if ROMSIZE == 256
     #if LOAD_ADDRESS == 0x08000000
         #define ROM_CFG "4*002Ka,124*002Kg"
@@ -55,6 +56,11 @@ unsigned char __attribute__((section(".version"))) txver[12] = TXVER;
 #define CMD_SETADDR	0x21
 #define CMD_ERASE	0x41
 
+enum FLASH_TYPE {
+    FLASH_NONE,
+    FLASH_INTERNAL,
+    FLASH_SPI,
+};
 extern uint32_t spiflash_sectors;
 extern void Periph_Init();
 extern void LCD_Init();
@@ -65,7 +71,7 @@ void SPIFlash_WriteBytes(uint32_t writeAddress, uint32_t length, const uint8_t *
 void SPIFlash_EraseSector(uint32_t sectorAddress);
 
 uint8_t altsetting = 0;
-char spi_flash_dfu_sring[] = "@SPI Flash: Library/0x00000000/000*04Kg";
+char spi_flash_dfu_string[] = "@SPI Flash: Library/0x00000000/000*04Kg";
 
 /* We need a special large control buffer for this device: */
 uint8_t usbd_control_buffer[1024];
@@ -169,7 +175,7 @@ static const char *usb_strings[] = {
 	TXVER,
 	/* This string is used by ST Microelectronics' DfuSe utility. */
 	"@Internal Flash   /0x08000000/" ROM_CFG,
-        spi_flash_dfu_sring,
+        spi_flash_dfu_string,
 };
 
 static uint8_t usbdfu_getstatus(usbd_device *usbd_dev, uint32_t *bwPollTimeout)
@@ -190,6 +196,23 @@ static uint8_t usbdfu_getstatus(usbd_device *usbd_dev, uint32_t *bwPollTimeout)
 	}
 }
 
+static enum FLASH_TYPE get_flash_type(uint32_t addr, int write)
+{
+	if (altsetting == 0) {
+		if (addr < LOAD_ADDRESS + (write ? PROTECT_FLASH_SIZE : 0))
+			return FLASH_NONE;
+		if (addr > LOAD_ADDRESS + 1024 * ROMSIZE)
+			return FLASH_NONE;
+		return FLASH_INTERNAL;
+	}
+	if (altsetting == 1) {
+		if (addr < spiflash_sectors * 4096)
+			return FLASH_SPI;
+		return FLASH_NONE;
+	}
+	return FLASH_NONE;
+}
+
 static void usbdfu_getstatus_complete(usbd_device *usbd_dev, struct usb_setup_data *req)
 {
 	int i;
@@ -204,9 +227,10 @@ static void usbdfu_getstatus_complete(usbd_device *usbd_dev, struct usb_setup_da
 			case CMD_ERASE:
 				{
 					uint32_t *dat = (uint32_t *)(prog.buf + 1);
-					if (altsetting == 0)
+			                enum FLASH_TYPE flash_type = get_flash_type(*dat, 1);
+					if (flash_type == FLASH_INTERNAL)
 						flash_erase_page(*dat);
-					else
+					else if (flash_type == FLASH_SPI)
 						SPIFlash_EraseSector(*dat);
 					break;
 				}
@@ -219,13 +243,14 @@ static void usbdfu_getstatus_complete(usbd_device *usbd_dev, struct usb_setup_da
 		} else {
 			uint32_t baseaddr = prog.addr + ((prog.blocknum - 2) *
 				       dfu_function.wTransferSize);
-                        if (baseaddr >= INTERNAL_FLASHADDR) {
+	                enum FLASH_TYPE flash_type = get_flash_type(baseaddr, 1);
+			if (flash_type == FLASH_INTERNAL) {
 				for (i = 0; i < prog.len; i += 2) {
 					uint16_t *dat = (uint16_t *)(prog.buf + i);
 					flash_program_half_word(baseaddr + i,
 							*dat);
 				}
-			} else {
+			} else if (flash_type == FLASH_INTERNAL) {
 				SPIFlash_WriteBytes(baseaddr, prog.len, prog.buf);
 			}
 		}
@@ -282,10 +307,13 @@ static enum usbd_request_return_codes usbdfu_control_request(usbd_device *usbd_d
 	                // From formula Address_Pointer + ((wBlockNum - 2)*wTransferSize)
                         uint32_t len_data = (req->wLength > sizeof(usbd_control_buffer)) ? sizeof(usbd_control_buffer) : req->wLength;
 	                uint32_t baseaddr = prog.addr + ((req->wValue - 2) * sizeof(usbd_control_buffer));
-                        if (baseaddr >= INTERNAL_FLASHADDR) {
+	                enum FLASH_TYPE flash_type = get_flash_type(baseaddr, 0);
+                        if (flash_type == FLASH_INTERNAL) {
 		                memcpy(usbd_control_buffer, (void*)baseaddr, len_data);
-			} else {
+			} else if (flash_type == FLASH_SPI) {
 				SPIFlash_ReadBytes(baseaddr, len_data, usbd_control_buffer);
+			} else {
+				return USBD_REQ_NOTSUPP;
 			}
 	                *len = len_data;
 	        }
@@ -368,7 +396,7 @@ int main(void)
 	SPIFlash_BlockWriteEnable(1);
 
         uint32_t val = spiflash_sectors;
-        char *ptr = spi_flash_dfu_sring + 31;
+        char *ptr = spi_flash_dfu_string + 31;
         for (int i = 0; i < 3; i++) {
             ptr[2-i] = (val % 10) + '0';
             val = val / 10;
